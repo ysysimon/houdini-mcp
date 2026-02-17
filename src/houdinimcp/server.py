@@ -4,7 +4,10 @@ import json
 import socket
 import traceback
 import os
-from PySide2 import QtCore
+try:
+    from PySide6 import QtCore
+except ImportError:
+    from PySide2 import QtCore
 
 from .handlers.scene import (
     get_scene_info, save_scene, load_scene, set_frame, get_asset_lib_status,

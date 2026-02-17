@@ -1,20 +1,23 @@
 """
 claude_terminal.py — Embedded Claude CLI terminal panel for Houdini.
 
-Provides a PySide2-based panel that runs `claude` (or a configurable command)
+Provides a PySide2/PySide6-based panel that runs `claude` (or a configurable command)
 inside Houdini's UI. Uses QProcess for subprocess management and a
 QPlainTextEdit widget for output display.
 
 Features: CWD selector, font size control, dark/light theme, auto-restart,
 tabbed sessions, connection status LED, context injection buttons.
 
-Requires: PySide2 (bundled with Houdini), optionally pyte for ANSI parsing.
+Requires: PySide6 (Houdini 21+) or PySide2 (older), optionally pyte for ANSI parsing.
 """
 import atexit
 import os
 import re
 
-from PySide2 import QtWidgets, QtCore, QtGui
+try:
+    from PySide6 import QtWidgets, QtCore, QtGui
+except ImportError:
+    from PySide2 import QtWidgets, QtCore, QtGui
 
 
 # ANSI escape stripping — use pyte if available, otherwise regex fallback
