@@ -95,6 +95,11 @@ class HoudiniConnection:
             "command_count": self.command_count,
         }
 
+    # Commands that return large payloads (base64 images) need bigger buffers and longer timeouts
+    _RENDER_COMMANDS = frozenset({
+        "render_single_view", "render_quad_view", "render_specific_camera", "render_flipbook",
+    })
+
     def send_command(self, cmd_type: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         Send a JSON command to Houdini's server and wait for the JSON response.
@@ -108,6 +113,10 @@ class HoudiniConnection:
         command = {"type": cmd_type, "params": params or {}}
         data_out = json.dumps(command).encode("utf-8")
 
+        is_render = cmd_type in self._RENDER_COMMANDS
+        timeout = 30.0 if is_render else 10.0
+        recv_size = 65536 if is_render else 8192
+
         try:
             # Send the command
             self.sock.sendall(data_out)
@@ -116,14 +125,14 @@ class HoudiniConnection:
             logger.info(f"Sent command to Houdini: {command}")
 
             # Read response. We'll accumulate chunks until we can parse a full JSON.
-            self.sock.settimeout(10.0)
+            self.sock.settimeout(timeout)
             buffer = b""
             start_time = asyncio.get_event_loop().time()
             while True:
-                if asyncio.get_event_loop().time() - start_time > 10.0:
+                if asyncio.get_event_loop().time() - start_time > timeout:
                      raise socket.timeout("Timeout waiting for Houdini response")
 
-                chunk = self.sock.recv(8192)
+                chunk = self.sock.recv(recv_size)
                 if not chunk:
                     if buffer:
                          raise ConnectionAbortedError("Connection closed by Houdini with incomplete data.")
@@ -172,7 +181,35 @@ def get_houdini_connection() -> HoudiniConnection:
 
 
 # Now define the MCP server that Claude will talk to over stdio
-mcp = FastMCP("HoudiniMCP")
+mcp = FastMCP("HoudiniMCP", instructions="""\
+IMPORTANT — Houdini MCP Connection Rules:
+
+1. **Never rapid-fire commands.** Wait at least 1 second between consecutive tool calls.
+   The Houdini plugin uses a single-threaded listener and needs time to reset between connections.
+
+2. **Separate scene commands from render commands.** Do all scene setup (create nodes,
+   modify parameters, set materials, connect nodes, etc.) FIRST. Then call render tools
+   in a separate step. Render responses contain large base64 image payloads that behave
+   differently from small JSON responses.
+
+3. **Render commands are slow.** Rendering takes significantly longer than node operations.
+   Do not assume a render has failed just because it takes time.
+
+4. **If you get a connection error, STOP.** Do not retry in a loop — you likely crashed
+   the plugin. Tell the user to restart the Houdini MCP plugin and verify the port is
+   listening before trying again.
+
+5. **Verify connectivity first.** Use the `ping` tool before starting work to confirm
+   the Houdini plugin is reachable. If ping fails, tell the user immediately.
+
+6. **Render workflow is two steps:** The render tool saves an image to disk (in /tmp/
+   by default) and returns the path. To view it, use `mplay /path/to/image.jpg &`
+   via the execute_houdini_code tool or tell the user the file path.
+
+7. **Use batch for bulk operations.** When creating multiple nodes or making many
+   changes at once, prefer the `batch` tool over individual calls. This executes
+   atomically in a single undo group and avoids rapid-fire connection issues.
+""")
 
 @asynccontextmanager
 async def server_lifespan(app: FastMCP):
