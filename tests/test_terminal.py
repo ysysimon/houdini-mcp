@@ -1,7 +1,5 @@
-"""Tests for claude_terminal.py — ANSI stripping and constants."""
-import ast
+"""Tests for claude_terminal.py — ANSI stripping and terminal launcher."""
 import re
-import textwrap
 
 import pytest
 
@@ -52,30 +50,67 @@ class TestStripAnsi:
 
 
 class TestTerminalConstants:
-    """Verify constants are defined correctly in the source."""
+    """Verify key elements are defined correctly in the source."""
 
     def setup_method(self):
         import pathlib
         src = pathlib.Path(__file__).parent.parent / "src" / "houdinimcp" / "claude_terminal.py"
         self._source = src.read_text()
 
-    def test_themes_defined(self):
-        assert "THEMES" in self._source
-        assert '"dark"' in self._source
-        assert '"light"' in self._source
-
-    def test_font_size_constants(self):
-        assert "DEFAULT_FONT_SIZE" in self._source
-        assert "MIN_FONT_SIZE" in self._source
-        assert "MAX_FONT_SIZE" in self._source
-
-    def test_scrollback_constant(self):
-        assert "DEFAULT_SCROLLBACK" in self._source
-
     def test_classes_defined(self):
-        assert "class TerminalTab" in self._source
         assert "class ClaudeTerminalWidget" in self._source
-        assert "class ConnectionStatusLED" in self._source
 
     def test_create_panel_function(self):
         assert "def create_panel" in self._source
+
+    def test_is_windows_defined(self):
+        assert "_IS_WINDOWS" in self._source
+
+
+class TestTerminalLauncher:
+    """Verify terminal launcher patterns in the source."""
+
+    def setup_method(self):
+        import pathlib
+        src = pathlib.Path(__file__).parent.parent / "src" / "houdinimcp" / "claude_terminal.py"
+        self._source = src.read_text()
+
+    def test_detect_terminal_function(self):
+        assert "def _detect_terminal" in self._source
+
+    def test_build_houdini_env_function(self):
+        assert "def _build_houdini_env" in self._source
+
+    def test_build_system_prompt_function(self):
+        assert "def _build_system_prompt" in self._source
+
+    def test_launch_in_terminal_function(self):
+        assert "def _launch_in_terminal" in self._source
+
+    def test_shutil_which_used(self):
+        assert "shutil.which" in self._source
+
+    def test_subprocess_popen_used(self):
+        assert "subprocess.Popen" in self._source
+
+    def test_terminal_names_linux(self):
+        """Common Linux terminal emulators should be in the detection list."""
+        assert "gnome-terminal" in self._source
+        assert "konsole" in self._source
+        assert "xterm" in self._source
+
+    def test_terminal_names_windows(self):
+        """Windows terminals should be in the detection list."""
+        assert "powershell" in self._source
+
+    def test_append_system_prompt_used(self):
+        """System prompt should be passed to claude CLI."""
+        assert "append-system-prompt" in self._source
+
+    def test_term_env_set(self):
+        """TERM=xterm-256color should be set for proper terminal detection."""
+        assert "xterm-256color" in self._source
+
+    def test_claude_terminal_override_env(self):
+        """CLAUDE_TERMINAL env var should be respected for terminal override."""
+        assert "CLAUDE_TERMINAL" in self._source
