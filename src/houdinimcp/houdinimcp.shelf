@@ -12,7 +12,8 @@ import hou
 
 desktop = hou.ui.curDesktop()
 panel = desktop.createFloatingPanel(hou.paneTabType.PythonPanel)
-panel.setActiveInterface(hou.pypanel.interfaceByName("claude_terminal"))
+pane_tab = panel.paneTabOfType(hou.paneTabType.PythonPanel)
+pane_tab.setActiveInterface(hou.pypanel.interfaceByName("claude_terminal"))
 ]]></script>
   </tool>
 
