@@ -11,6 +11,7 @@ Usage:
     python install.py                    # Auto-detect Houdini version
     python install.py --houdini-version 20.5  # Specify Houdini version
     python install.py --prefs-dir /path/to/houdiniX.Y  # Explicit prefs directory
+    python install.py --claude-code      # Also auto-allow Houdini MCP tools in Claude Code
     python install.py --dry-run          # Show what would be done without doing it
 """
 import os
@@ -176,6 +177,24 @@ def install(prefs_dir, source_dir, dry_run=False):
             json.dump(package_json, f, indent=2)
         print(f"\n  Created package file: {package_file}")
 
+    # Write MCP config so Claude Code launched from Houdini gets MCP tools
+    mcp_config = {
+        "mcpServers": {
+            "houdini": {
+                "command": "uv",
+                "args": ["--directory", source_dir, "run", "python", "houdini_mcp_server.py"],
+            }
+        }
+    }
+    mcp_config_path = os.path.join(plugin_dest, "mcp.json")
+    if dry_run:
+        print(f"  WRITE {mcp_config_path}")
+    else:
+        with open(mcp_config_path, "w") as f:
+            json.dump(mcp_config, f, indent=2)
+            f.write("\n")
+        print(f"  Created MCP config: {mcp_config_path}")
+
     print("\nDone!" if not dry_run else "\nDry run complete — no files were changed.")
     if not dry_run:
         print("Restart Houdini for changes to take effect.")
@@ -186,6 +205,8 @@ def main():
     parser = argparse.ArgumentParser(description="Install HoudiniMCP plugin for auto-loading")
     parser.add_argument("--houdini-version", default=None, help="Houdini version (e.g. 20.5)")
     parser.add_argument("--prefs-dir", default=None, help="Explicit Houdini preferences directory")
+    parser.add_argument("--claude-code", action="store_true",
+                        help="Auto-allow Houdini MCP tools in Claude Code (no per-tool prompts)")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be done without doing it")
     args = parser.parse_args()
 
@@ -204,6 +225,40 @@ def main():
 
     print(f"Houdini prefs directory: {prefs_dir}\n")
     install(prefs_dir, source_dir, args.dry_run)
+
+    if args.claude_code:
+        configure_claude_code(args.dry_run)
+
+
+def configure_claude_code(dry_run=False):
+    """Add mcp__houdini__* to Claude Code's allowed tools."""
+    settings_dir = os.path.join(os.path.expanduser("~"), ".claude")
+    settings_file = os.path.join(settings_dir, "settings.json")
+
+    permission = "mcp__houdini__*"
+
+    if os.path.isfile(settings_file):
+        with open(settings_file) as f:
+            settings = json.load(f)
+    else:
+        settings = {}
+
+    allow_list = settings.setdefault("permissions", {}).setdefault("allow", [])
+    if permission in allow_list:
+        print(f"\nClaude Code: {permission} already in {settings_file}")
+        return
+
+    if dry_run:
+        print(f"\n  WOULD ADD '{permission}' to {settings_file}")
+        return
+
+    allow_list.append(permission)
+    os.makedirs(settings_dir, exist_ok=True)
+    with open(settings_file, "w") as f:
+        json.dump(settings, f, indent=2)
+        f.write("\n")
+    print(f"\nClaude Code: Added '{permission}' to {settings_file}")
+    print("Houdini MCP tools will no longer require per-call approval.")
 
 
 if __name__ == "__main__":

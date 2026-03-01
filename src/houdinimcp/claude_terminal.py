@@ -102,6 +102,14 @@ def _build_system_prompt():
     return "\n".join(lines)
 
 
+def _find_mcp_config():
+    """Find the MCP config written during install."""
+    config = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp.json")
+    if os.path.isfile(config):
+        return config
+    return None
+
+
 def _launch_in_terminal(terminal, cmd_args, cwd, env):
     """Launch cmd_args in the specified terminal emulator."""
     if _IS_WINDOWS:
@@ -221,6 +229,8 @@ class ClaudeTerminalWidget(QtWidgets.QWidget):
         for key in ["HOUDINIMCP_PORT", "HIP", "HOUDINI_VERSION"]:
             if key in env:
                 lines.append(f"  {key}={env[key]}")
+        mcp_config = _find_mcp_config()
+        lines.append(f"  MCP config: {mcp_config or 'not found (no MCP tools)'}")
         lines.append("")
         lines.append("System prompt (appended on launch):")
         for line in prompt.split("\n"):
@@ -231,7 +241,11 @@ class ClaudeTerminalWidget(QtWidgets.QWidget):
         """Launch claude in the detected terminal emulator."""
         env = _build_houdini_env()
         prompt = _build_system_prompt()
-        cmd_args = [self._command, "--append-system-prompt", prompt]
+        cmd_args = [self._command]
+        mcp_config = _find_mcp_config()
+        if mcp_config:
+            cmd_args.extend(["--mcp-config", mcp_config])
+        cmd_args.extend(["--append-system-prompt", prompt])
         _launch_in_terminal(self._terminal, cmd_args, self._cwd, env)
         self._update_info()
 
