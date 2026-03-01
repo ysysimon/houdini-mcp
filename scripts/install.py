@@ -231,11 +231,16 @@ def main():
 
 
 def configure_claude_code(dry_run=False):
-    """Add mcp__houdini__* to Claude Code's allowed tools."""
+    """Add HoudiniMCP permissions to Claude Code's allowed tools."""
     settings_dir = os.path.join(os.path.expanduser("~"), ".claude")
     settings_file = os.path.join(settings_dir, "settings.json")
 
-    permission = "mcp__houdini__*"
+    permissions = [
+        "mcp__houdini__*",
+        "Bash(mplay *)",
+        "Bash(ls -la /tmp/*)",
+        "Read(/tmp/*)",
+    ]
 
     if os.path.isfile(settings_file):
         with open(settings_file) as f:
@@ -244,21 +249,29 @@ def configure_claude_code(dry_run=False):
         settings = {}
 
     allow_list = settings.setdefault("permissions", {}).setdefault("allow", [])
-    if permission in allow_list:
-        print(f"\nClaude Code: {permission} already in {settings_file}")
+    added = []
+    for permission in permissions:
+        if permission not in allow_list:
+            added.append(permission)
+            if not dry_run:
+                allow_list.append(permission)
+
+    if not added:
+        print(f"\nClaude Code: All permissions already in {settings_file}")
         return
 
     if dry_run:
-        print(f"\n  WOULD ADD '{permission}' to {settings_file}")
+        for permission in added:
+            print(f"\n  WOULD ADD '{permission}' to {settings_file}")
         return
 
-    allow_list.append(permission)
     os.makedirs(settings_dir, exist_ok=True)
     with open(settings_file, "w") as f:
         json.dump(settings, f, indent=2)
         f.write("\n")
-    print(f"\nClaude Code: Added '{permission}' to {settings_file}")
-    print("Houdini MCP tools will no longer require per-call approval.")
+    for permission in added:
+        print(f"  Claude Code: Added '{permission}' to {settings_file}")
+    print("Houdini MCP tools and mplay will no longer require per-call approval.")
 
 
 if __name__ == "__main__":
