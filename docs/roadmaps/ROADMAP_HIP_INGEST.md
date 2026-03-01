@@ -10,7 +10,7 @@ Every Houdini install ships with example `.hip` files. They're version-matched, 
 
 - **Procedural, not curated.** No committed `.hip` files. The pipeline discovers them on the user's machine.
 - **Version-aware.** Houdini best practices change between versions. Patterns extracted from 21.0 examples reflect 21.0 workflows.
-- **Zero deps.** Same philosophy as `houdini_rag.py` — stdlib only, no Houdini process needed (except Phase 0 for HDAs).
+- **Zero deps.** Same philosophy as `houdini_rag.py` — stdlib only, no Houdini process needed (except Phase 1 for HDAs).
 - **One script, two modes.** `scripts/ingest_hips.py` works as both a standalone CLI (mechanical extraction) and a micro-MCP server (LLM-driven annotation via any MCP client).
 
 ## Execution Model
@@ -57,7 +57,7 @@ Claude Code can orchestrate the full pipeline — run the mechanical extraction,
 - **LLM annotation:** Available via micro-MCP server mode. Any MCP client can drive it. Not hardcoded to a specific LLM or client.
 - **Search integration:** Extend existing `search_docs` to also cover `hip_patterns/`. One search tool, multiple indices. No separate `search_patterns` tool.
 
-## Phase 0: HDA Network Extraction (Requires Houdini)
+## Phase 1: HDA Network Extraction (Requires Houdini)
 
 **Goal:** Extract node networks from `.hda` files. HDAs are binary — they require a running Houdini process to read.
 
@@ -75,7 +75,7 @@ Many essential SideFX example workflows are shipped as HDAs, not `.hip` files. S
 
 **Note:** This is the only phase that requires a Houdini process. All subsequent phases work on the text output.
 
-## Phase 1: Houdini Install Detection & .hip Discovery
+## Phase 2: Houdini Install Detection & .hip Discovery
 
 **Goal:** Auto-detect the Houdini install directory (`$HFS`) and catalog all `.hip` files in its `help/` tree.
 
@@ -103,7 +103,7 @@ Extend or reuse the detection pattern from `scripts/install.py:find_houdini_pref
 
 **Output:** A function that returns a list of `.hip` file paths from the local Houdini install.
 
-## Phase 2: Format Discovery & Parser
+## Phase 3: Format Discovery & Parser
 
 **Goal:** Understand the `.hip` text format, then build a parser.
 
@@ -120,7 +120,7 @@ Extend or reuse the detection pattern from `scripts/install.py:find_houdini_pref
 
 **Output:** `hip_parser.py` + tests + format reference doc.
 
-## Phase 3: Pattern Extraction
+## Phase 4: Pattern Extraction
 
 **Goal:** Distill parsed scenes into reusable workflow patterns. Extract both full scene graphs and focused subgraphs.
 
@@ -134,11 +134,11 @@ Extend or reuse the detection pattern from `scripts/install.py:find_houdini_pref
   - Extract "interesting" parameter sets (non-default values that define the setup)
 - [ ] Deduplicate across all discovered `.hip` files — find recurring patterns
 - [ ] Tag patterns by source file and Houdini version
-- [ ] Consume HDA-extracted networks (from Phase 0) alongside `.hip` data
+- [ ] Consume HDA-extracted networks (from Phase 1) alongside `.hip` data
 
 **Output:** `hip_patterns.py`. Takes parsed scene data, returns named patterns with node types, connections, and key parameters. Both full graphs and focused subgraphs.
 
-## Phase 4: Indexing & Storage
+## Phase 5: Indexing & Storage
 
 **Goal:** Make extracted patterns searchable via the existing `search_docs` tool.
 
@@ -149,7 +149,7 @@ Extend or reuse the detection pattern from `scripts/install.py:find_houdini_pref
 
 **Output:** Indexed, searchable pattern library. Gitignored, machine-local, version-matched.
 
-## Phase 5: Micro-MCP Server & LLM Annotation
+## Phase 6: Micro-MCP Server & LLM Annotation
 
 **Goal:** `ingest_hips.py --serve` runs as a micro-MCP server, exposing annotation tools for any MCP client.
 
@@ -194,7 +194,7 @@ claude --mcp-config ingest_mcp.json
 
 **Output:** Annotated pattern library. Richer search results, better context for Claude. Works with any MCP client.
 
-## Phase 6: End-to-End Script
+## Phase 7: End-to-End Script
 
 **Goal:** `scripts/ingest_hips.py` — one script, multiple modes.
 
@@ -216,7 +216,7 @@ uv run python scripts/ingest_hips.py --serve            # with uv
 - [ ] Build index (extends `search_docs`)
 - [ ] Progress reporting (file N of M, patterns found)
 - [ ] `--serve` mode: start micro-MCP server for LLM annotation
-- [ ] Runs headless, no Houdini process needed (except Phase 0 for HDAs)
+- [ ] Runs headless, no Houdini process needed (except Phase 1 for HDAs)
 
 **Output:** One script, flexible execution. Clone repo → install → run ingest → optionally connect any MCP client for annotation → Claude has workflow knowledge matched to the user's Houdini version.
 
