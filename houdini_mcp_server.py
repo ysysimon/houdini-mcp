@@ -35,6 +35,7 @@ if not _venv_found:
 print("Python path:", sys.path, file=sys.stderr)
 import json
 import socket
+import subprocess
 import logging
 import tempfile
 from dataclasses import dataclass
@@ -202,6 +203,10 @@ IMPORTANT — Houdini MCP Connection Rules:
 7. **Use batch for bulk operations.** When creating multiple nodes or making many
    changes at once, prefer the `batch` tool over individual calls. This executes
    atomically in a single undo group and avoids rapid-fire connection issues.
+
+8. **Monitor long renders.** After launching a Karma or Mantra render, use
+   `monitor_render` to poll for `husk` / `mantra-bin` processes and check if
+   the output file exists. No Houdini connection needed.
 """)
 
 @asynccontextmanager
@@ -761,6 +766,78 @@ def get_doc(ctx: Context, path: str) -> str:
     if "error" in result:
         return f"Error: {result['error']}"
     return json.dumps(result, indent=2)
+
+
+# -------------------------------------------------------------------
+# Render Monitoring (bridge-side, no Houdini connection)
+# -------------------------------------------------------------------
+_RENDER_PROCESS_NAMES = ("husk", "mantra-bin")
+
+
+def _find_render_processes() -> List[Dict[str, str]]:
+    """Detect running husk/mantra-bin processes via OS process listing.
+
+    Returns a list of dicts with keys: name, pid, cpu_time, command.
+    Works on Linux/macOS (ps aux) and Windows (tasklist /FO CSV /V).
+    """
+    if sys.platform == "win32":
+        result = subprocess.run(
+            ["tasklist", "/FO", "CSV", "/V"],
+            capture_output=True, text=True, timeout=10,
+        )
+        processes = []
+        for line in result.stdout.splitlines()[1:]:  # skip header
+            lower = line.lower()
+            for name in _RENDER_PROCESS_NAMES:
+                if name in lower:
+                    parts = line.strip('"').split('","')
+                    processes.append({
+                        "name": parts[0] if parts else name,
+                        "pid": parts[1] if len(parts) > 1 else "?",
+                        "cpu_time": parts[7] if len(parts) > 7 else "?",
+                        "command": parts[0] if parts else name,
+                    })
+        return processes
+
+    # Linux / macOS
+    result = subprocess.run(
+        ["ps", "aux"], capture_output=True, text=True, timeout=10,
+    )
+    processes = []
+    for line in result.stdout.splitlines()[1:]:  # skip header
+        lower = line.lower()
+        for name in _RENDER_PROCESS_NAMES:
+            if name in lower:
+                cols = line.split(None, 10)
+                processes.append({
+                    "name": name,
+                    "pid": cols[1] if len(cols) > 1 else "?",
+                    "cpu_time": cols[9] if len(cols) > 9 else "?",
+                    "command": cols[10] if len(cols) > 10 else line.strip(),
+                })
+    return processes
+
+
+@mcp.tool()
+def monitor_render(ctx: Context, output_path: str = None) -> str:
+    """Check if a Karma (husk) or Mantra (mantra-bin) render is still running.
+    Optionally pass output_path to also report file existence and size.
+    No Houdini connection needed — runs on the bridge side."""
+    processes = _find_render_processes()
+    info: Dict[str, Any] = {
+        "rendering": len(processes) > 0,
+        "process_count": len(processes),
+        "processes": processes,
+    }
+    if output_path is not None:
+        if os.path.exists(output_path):
+            info["output_file"] = {
+                "exists": True,
+                "size_bytes": os.path.getsize(output_path),
+            }
+        else:
+            info["output_file"] = {"exists": False}
+    return json.dumps(info, indent=2)
 
 
 def main():
