@@ -2,14 +2,13 @@
 import os
 import tempfile
 import traceback
-import base64
 
 import hou
 from ..HoudiniMCPRender import render_single_view, render_quad_view, render_specific_camera
 
 
 def _process_rendered_image(filepath, camera_path=None, view_name=None):
-    """Read, base64-encode, and return metadata for a rendered image file."""
+    """Return metadata for a rendered image file."""
     if not filepath or not os.path.exists(filepath):
         return {"status": "error", "message": f"Rendered file not found: {filepath}",
                 "origin": "_process_rendered_image"}
@@ -23,15 +22,11 @@ def _process_rendered_image(filepath, camera_path=None, view_name=None):
         if cam_node and cam_node.parm("resx") and cam_node.parm("resy"):
             resolution = [cam_node.parm("resx").eval(), cam_node.parm("resy").eval()]
 
-    with open(filepath, "rb") as image_file:
-        encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
-
     result_data = {
         "status": "success",
         "format": fmt,
         "resolution": resolution,
-        "image_base64": encoded_string,
-        "filepath_on_server": filepath,
+        "filepath": filepath,
     }
     if view_name:
         result_data["view_name"] = view_name

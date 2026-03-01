@@ -109,51 +109,30 @@ def setup_camera_rig(bbox_center, orthographic=False):
     null_name = "MCP_CAM_CENTER"
     cam_name = "MCP_CAMERA"
     
-    # Delete existing nodes if they exist
-    existing_null = hou.node("/obj/" + null_name)
-    if existing_null:
-        existing_null.destroy()
-        
-    existing_camera = hou.node("/obj/" + cam_name)
-    if existing_camera:
-        existing_camera.destroy()
-    
-    # Create a null at the center of the bounding box
-    null = hou.node("/obj").createNode("null", null_name)
-    
-    # Set the null's position in the network (not world space)
-    null.setPosition(hou.Vector2(0, 0))
-    
-    # Set the null's translation to the center of the bounding box
+    # Reuse existing nodes if they exist, otherwise create new ones
+    null = hou.node("/obj/" + null_name)
+    camera = hou.node("/obj/" + cam_name)
+
+    if not null:
+        null = hou.node("/obj").createNode("null", null_name)
+        null.setPosition(hou.Vector2(0, 0))
+
+    if not camera:
+        camera = hou.node("/obj").createNode("cam", cam_name)
+        camera.setPosition(hou.Vector2(3, 0))
+        camera.setFirstInput(null)
+
+    # Reset position and rotation for the rig
+    null.parmTuple("r").set((0, 0, 0))
     null.parmTuple("t").set(bbox_center)
-    
-    # Create a camera as a child of the null
-    camera = hou.node("/obj").createNode("cam", cam_name)
-    
-    # Set the camera's network position
-    camera.setPosition(hou.Vector2(3, 0))
-    
-    # Set the camera's transform
+
+    # Reset camera transform and set params
     camera.parmTuple("t").set([0, 0, 5])
-    
-    # Set the camera's resolution to 512x512
     camera.parm("resx").set(512)
     camera.parm("resy").set(512)
-    
-    # Set the aspect ratio to 1.0 (square)
     camera.parm("aspect").set(1.0)
-    
-    # Set projection type
-    if orthographic:
-        camera.parm("projection").set(1)  # 1 = Orthographic
-        print("Created orthographic camera")
-    else:
-        camera.parm("projection").set(0)  # 0 = Perspective
-        print("Created perspective camera")
-    
-    # Make the camera a child of the null
-    camera.setFirstInput(null)
-    
+    camera.parm("projection").set(1 if orthographic else 0)
+
     return null
 
 def rotate_camera_center(null_node, rotation=(0, 90, 0)):
@@ -390,13 +369,10 @@ def setup_render_node(render_engine="opengl", karma_engine="cpu", render_path=No
             
         filepath = os.path.join(render_path, filename)
         
-        # Check if the render node exists and delete it if it does
+        # Reuse existing render node or create a new one
         render_node = hou.node("/out/" + render_node_name)
-        if render_node:
-            render_node.destroy()
-        
-        # Create a new render node
-        render_node = hou.node("/out").createNode(node_type, render_node_name)
+        if not render_node:
+            render_node = hou.node("/out").createNode(node_type, render_node_name)
         
         if not render_node:
             print(f"Failed to create {render_engine} render node. Check if /out context exists.")

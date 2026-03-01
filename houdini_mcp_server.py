@@ -95,11 +95,6 @@ class HoudiniConnection:
             "command_count": self.command_count,
         }
 
-    # Commands that return large payloads (base64 images) need bigger buffers and longer timeouts
-    _RENDER_COMMANDS = frozenset({
-        "render_single_view", "render_quad_view", "render_specific_camera", "render_flipbook",
-    })
-
     def send_command(self, cmd_type: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         Send a JSON command to Houdini's server and wait for the JSON response.
@@ -113,9 +108,8 @@ class HoudiniConnection:
         command = {"type": cmd_type, "params": params or {}}
         data_out = json.dumps(command).encode("utf-8")
 
-        is_render = cmd_type in self._RENDER_COMMANDS
-        timeout = 30.0 if is_render else 10.0
-        recv_size = 65536 if is_render else 8192
+        timeout = 30.0
+        recv_size = 8192
 
         try:
             # Send the command
@@ -189,8 +183,7 @@ IMPORTANT — Houdini MCP Connection Rules:
 
 2. **Separate scene commands from render commands.** Do all scene setup (create nodes,
    modify parameters, set materials, connect nodes, etc.) FIRST. Then call render tools
-   in a separate step. Render responses contain large base64 image payloads that behave
-   differently from small JSON responses.
+   in a separate step.
 
 3. **Render commands are slow.** Rendering takes significantly longer than node operations.
    Do not assume a render has failed just because it takes time.
@@ -202,9 +195,9 @@ IMPORTANT — Houdini MCP Connection Rules:
 5. **Verify connectivity first.** Use the `ping` tool before starting work to confirm
    the Houdini plugin is reachable. If ping fails, tell the user immediately.
 
-6. **Render workflow is two steps:** The render tool saves an image to disk (in /tmp/
-   by default) and returns the path. To view it, use `mplay /path/to/image.jpg &`
-   via the execute_houdini_code tool or tell the user the file path.
+6. **Render workflow:** Render tools save images to disk (in /tmp/ by default) and return
+   the file path. Use the Read tool to view the rendered image directly, or tell the user
+   the file path.
 
 7. **Use batch for bulk operations.** When creating multiple nodes or making many
    changes at once, prefer the `batch` tool over individual calls. This executes
@@ -375,7 +368,11 @@ def render_single_view(ctx: Context,
             origin = response.get("origin", "houdini")
             return f"Error ({origin}): {response.get('message', 'Unknown error')}"
 
-        return response.get("result", "Render completed but no output path returned.")
+        result = response.get("result", {})
+        if isinstance(result, dict) and result.get("filepath"):
+            res = result.get("resolution", [0, 0])
+            return f"Rendered to {result['filepath']} ({res[0]}x{res[1]}, {render_engine})"
+        return json.dumps(result, indent=2)
     except Exception as e:
         logger.error(f"render_single_view failed: {e}", exc_info=True)
         return f"Render failed: {str(e)}"
@@ -400,7 +397,16 @@ def render_quad_views(ctx: Context,
             origin = response.get("origin", "houdini")
             return f"Error ({origin}): {response.get('message', 'Unknown error')}"
 
-        return response.get("result", "Render completed but no output returned.")
+        result = response.get("result", {})
+        if isinstance(result, dict) and isinstance(result.get("results"), list):
+            lines = ["Rendered views:"]
+            for view in result["results"]:
+                name = view.get("view_name", "unknown")
+                fp = view.get("filepath", "?")
+                res = view.get("resolution", [0, 0])
+                lines.append(f"  {name}: {fp} ({res[0]}x{res[1]})")
+            return "\n".join(lines)
+        return json.dumps(result, indent=2)
     except Exception as e:
         logger.error(f"render_quad_views failed: {e}", exc_info=True)
         return f"Render failed: {str(e)}"
@@ -427,7 +433,11 @@ def render_specific_camera(ctx: Context,
             origin = response.get("origin", "houdini")
             return f"Error ({origin}): {response.get('message', 'Unknown error')}"
 
-        return response.get("result", "Render completed but no output path returned.")
+        result = response.get("result", {})
+        if isinstance(result, dict) and result.get("filepath"):
+            res = result.get("resolution", [0, 0])
+            return f"Rendered to {result['filepath']} ({res[0]}x{res[1]}, {render_engine})"
+        return json.dumps(result, indent=2)
     except Exception as e:
         logger.error(f"render_specific_camera failed: {e}", exc_info=True)
         return f"Render failed: {str(e)}"
