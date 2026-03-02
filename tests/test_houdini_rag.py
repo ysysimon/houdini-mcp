@@ -35,7 +35,7 @@ class TestHoudiniTokenizer:
 
     def test_preserves_hou_calls(self):
         tokens = self.tok.tokenize("use hou.node() to get a reference")
-        assert "hou.node()" in tokens
+        assert "hou.node" in tokens
 
     def test_preserves_node_paths(self):
         tokens = self.tok.tokenize("navigate to /obj/geo1/scatter")

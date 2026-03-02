@@ -38,27 +38,38 @@ class HoudiniTokenizer:
         'very', 'just', 'also', 'now', 'here', 'there', 'any', 'many'
     }
 
+    # Single-pass regex: split text into candidate tokens (letters, digits,
+    # underscores, dots, slashes).  Then classify each token in Python —
+    # avoids running multiple overlapping regexes over multi-MB strings,
+    # which causes catastrophic backtracking on the underscore pattern.
+    _RE_RAW = re.compile(r'[a-z0-9_./-]+')
+    _RE_SUBTOKEN = re.compile(r'[a-z0-9_]+')
+
     def tokenize(self, text):
         text = text.lower()
-        preserved = []
+        raw_tokens = self._RE_RAW.findall(text)
 
-        # hou.node, hou.parm, etc.
-        for match in re.finditer(r'hou\.\w+(?:\(\))?', text):
-            preserved.append(match.group())
+        tokens = []
+        preserved = set()
+        for raw in raw_tokens:
+            # hou.xxx() calls
+            if raw.startswith('hou.'):
+                preserved.add(raw.rstrip('()'))
+            # Node paths: /obj/geo1
+            if raw.startswith('/') and '/' in raw[1:]:
+                preserved.add(raw)
+            # Underscore compounds: mtlxstandard_surface
+            if '_' in raw:
+                clean = raw.strip('_./')
+                if '_' in clean:
+                    preserved.add(clean)
+            # Extract alphanumeric sub-tokens
+            for sub in self._RE_SUBTOKEN.findall(raw):
+                if len(sub) > 1 and sub not in self.STOPWORDS:
+                    tokens.append(sub)
 
-        # Node paths: /obj/geo1, /mat/shader
-        for match in re.finditer(r'/\w+(?:/\w+)+', text):
-            preserved.append(match.group())
-
-        # Underscore compounds: mtlxstandard_surface
-        for match in re.finditer(r'\w+_\w+(?:_\w+)*', text):
-            preserved.append(match.group())
-
-        # General tokenization
-        tokens = re.findall(r'[a-z0-9_]+', text)
         tokens.extend(preserved)
-
-        return [t for t in tokens if t not in self.STOPWORDS and len(t) > 1]
+        return tokens
 
 
 class BM25Index:
@@ -274,6 +285,9 @@ def build_combined_index(docs_dir=None, patterns_dir=None, output_path=None):
 
     Either or both sources may be absent — builds from whatever is available.
     """
+    import sys
+    import time
+
     doc_loader = DocumentLoader(docs_dir)
     pattern_loader = PatternLoader(patterns_dir)
 
@@ -281,8 +295,13 @@ def build_combined_index(docs_dir=None, patterns_dir=None, output_path=None):
     documents.extend(pattern_loader.load_all())
 
     index = BM25Index()
-    for doc in documents:
+    total = len(documents)
+    start = time.time()
+    for i, doc in enumerate(documents, 1):
         index.add_document(doc["path"], doc["title"], doc["content"])
+        if i % 1000 == 0 or i == total:
+            elapsed = time.time() - start
+            print(f"  Indexed {i}/{total} documents ({elapsed:.1f}s)", file=sys.stderr)
     index.build()
     index.save(output_path)
     return index
