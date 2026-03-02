@@ -238,6 +238,8 @@ def cmd_extract_hdas(args):
         cmd.extend(["--extra-dir", extra])
     if hasattr(args, "output") and args.output:
         cmd.extend(["--output", args.output])
+    workers = getattr(args, "workers", 0)
+    cmd.extend(["--workers", str(workers)])
 
     print(f"Running: {os.path.basename(hython)} {os.path.basename(script)}")
     result = subprocess.run(cmd, env={**os.environ, "HFS": hfs_path})
@@ -471,6 +473,7 @@ def main():
     extract_hdas_parser = subparsers.add_parser("extract-hdas", help="Extract HDA networks via hython")
     _add_common_args(extract_hdas_parser)
     extract_hdas_parser.add_argument("--output", default=None, help="Output JSON path (default: hda_parsed.json)")
+    extract_hdas_parser.add_argument("--workers", type=int, default=0, help="Parallel workers (0=auto, 1=serial)")
 
     extract_parser = subparsers.add_parser("extract", help="Merge parsed data + extract patterns")
     _add_common_args(extract_parser)
@@ -481,6 +484,7 @@ def main():
     all_parser = subparsers.add_parser("all", help="Run full pipeline including HDAs")
     _add_common_args(all_parser)
     all_parser.add_argument("--output", default=None, help="Output JSON path (default: hip_parsed.json)")
+    all_parser.add_argument("--workers", type=int, default=0, help="Parallel workers for HDA extraction (0=auto, 1=serial)")
 
     args = parser.parse_args()
 
