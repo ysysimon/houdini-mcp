@@ -17,6 +17,8 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent
 DOCS_DIR = Path(os.environ.get("HOUDINIMCP_DOCS_DIR", SCRIPT_DIR / "houdini_docs"))
 INDEX_PATH = Path(os.environ.get("HOUDINIMCP_DOCS_INDEX", SCRIPT_DIR / "houdini_docs_index.json"))
+PATTERNS_DIR = Path(os.environ.get("HOUDINIMCP_PATTERNS_DIR", SCRIPT_DIR / "hip_patterns"))
+PATTERNS_INDEX_PATH = Path(os.environ.get("HOUDINIMCP_PATTERNS_INDEX", SCRIPT_DIR / "hip_patterns_index.json"))
 
 
 class HoudiniTokenizer:
@@ -225,6 +227,35 @@ class DocumentLoader:
         return documents
 
 
+class PatternLoader:
+    """Load extracted .hip pattern text files from hip_patterns/."""
+
+    def __init__(self, patterns_dir=None):
+        self.patterns_dir = Path(patterns_dir) if patterns_dir else PATTERNS_DIR
+
+    def load_all(self):
+        """Load all .txt files from the patterns directory.
+
+        Returns list of {path, title, content} dicts.
+        """
+        documents = []
+        if not self.patterns_dir.exists():
+            return documents
+        for filepath in sorted(self.patterns_dir.glob("*.txt")):
+            with open(filepath, "r", encoding="utf-8") as f:
+                content = f.read()
+            # Title from first line (e.g. "Pattern: SOP Chain")
+            first_line = content.split("\n", 1)[0] if content else filepath.stem
+            title = first_line
+            rel_path = f"patterns/{filepath.name}"
+            documents.append({
+                "path": rel_path,
+                "title": title,
+                "content": content,
+            })
+        return documents
+
+
 def build_index(docs_dir=None, output_path=None):
     """Build the BM25 index from documentation files."""
     loader = DocumentLoader(docs_dir)
@@ -238,17 +269,42 @@ def build_index(docs_dir=None, output_path=None):
     return index
 
 
+def build_combined_index(docs_dir=None, patterns_dir=None, output_path=None):
+    """Build a BM25 index from both docs and pattern files.
+
+    Either or both sources may be absent — builds from whatever is available.
+    """
+    doc_loader = DocumentLoader(docs_dir)
+    pattern_loader = PatternLoader(patterns_dir)
+
+    documents = doc_loader.load_all()
+    documents.extend(pattern_loader.load_all())
+
+    index = BM25Index()
+    for doc in documents:
+        index.add_document(doc["path"], doc["title"], doc["content"])
+    index.build()
+    index.save(output_path)
+    return index
+
+
 # Global index instance (loaded on demand)
 _index = None
 
 def get_index():
-    """Get or load the global index instance."""
+    """Get or load the global index instance.
+
+    Loads saved index from disk. If no index exists but source directories
+    (docs and/or patterns) are available, builds a combined index.
+    """
     global _index
     if _index is None:
         _index = BM25Index.load()
         if _index is None:
-            if DOCS_DIR.exists():
-                _index = build_index()
+            has_docs = DOCS_DIR.exists()
+            has_patterns = PATTERNS_DIR.exists() and any(PATTERNS_DIR.glob("*.txt"))
+            if has_docs or has_patterns:
+                _index = build_combined_index()
     return _index
 
 

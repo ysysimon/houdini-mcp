@@ -10,7 +10,9 @@ from houdini_rag import (
     HoudiniTokenizer,
     BM25Index,
     DocumentLoader,
+    PatternLoader,
     build_index,
+    build_combined_index,
     search_docs,
     get_doc_content,
 )
@@ -196,6 +198,7 @@ class TestSearchAndGetDoc:
         monkeypatch.setattr(houdini_rag, "_index", None)
         monkeypatch.setattr(houdini_rag, "INDEX_PATH", __import__("pathlib").Path("/nonexistent"))
         monkeypatch.setattr(houdini_rag, "DOCS_DIR", __import__("pathlib").Path("/nonexistent"))
+        monkeypatch.setattr(houdini_rag, "PATTERNS_DIR", __import__("pathlib").Path("/nonexistent"))
         result = search_docs("anything")
         assert isinstance(result, dict)
         assert "error" in result
@@ -221,3 +224,100 @@ class TestSearchAndGetDoc:
                 assert "Box SOP" in result["content"]
             finally:
                 houdini_rag.DOCS_DIR = old_docs
+
+
+# ---------------------------------------------------------------------------
+# PatternLoader
+# ---------------------------------------------------------------------------
+class TestPatternLoader:
+    def test_load_all_from_temp_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "scene_abc123.txt"), "w") as f:
+                f.write("Pattern: Scene Graph\nSource: test.hip\n\nNodes:\n  box1 (SOP) [box]")
+            with open(os.path.join(tmpdir, "recipe_def456.txt"), "w") as f:
+                f.write("Pattern: box Recipe\nSource: test.hip\n\nNodes:\n  box1 (SOP) [box] — size: 2")
+
+            loader = PatternLoader(tmpdir)
+            docs = loader.load_all()
+            assert len(docs) == 2
+            paths = {d["path"] for d in docs}
+            assert "patterns/recipe_def456.txt" in paths
+            assert "patterns/scene_abc123.txt" in paths
+
+    def test_title_from_first_line(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "recipe_abc.txt"), "w") as f:
+                f.write("Pattern: box Recipe\nSource: test.hip")
+
+            loader = PatternLoader(tmpdir)
+            docs = loader.load_all()
+            assert docs[0]["title"] == "Pattern: box Recipe"
+
+    def test_empty_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            loader = PatternLoader(tmpdir)
+            assert loader.load_all() == []
+
+    def test_nonexistent_dir(self):
+        loader = PatternLoader("/nonexistent/patterns")
+        assert loader.load_all() == []
+
+
+# ---------------------------------------------------------------------------
+# build_combined_index
+# ---------------------------------------------------------------------------
+class TestBuildCombinedIndex:
+    def test_docs_and_patterns(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            docs_dir = os.path.join(tmpdir, "docs")
+            patterns_dir = os.path.join(tmpdir, "patterns")
+            os.makedirs(os.path.join(docs_dir, "sop"))
+            os.makedirs(patterns_dir)
+
+            with open(os.path.join(docs_dir, "sop", "box.md"), "w") as f:
+                f.write("= Box SOP =\nCreates a box primitive.")
+            with open(os.path.join(patterns_dir, "recipe_abc.txt"), "w") as f:
+                f.write("Pattern: box Recipe\nSource: test.hip\nCategory: SOP\n\nNodes:\n  box1 (SOP) [box] — size: 2")
+
+            idx_path = os.path.join(tmpdir, "combined.json")
+            index = build_combined_index(
+                docs_dir=docs_dir,
+                patterns_dir=patterns_dir,
+                output_path=idx_path,
+            )
+            assert len(index.documents) == 2
+            paths = {d["path"] for d in index.documents}
+            assert "sop/box.md" in paths
+            assert "patterns/recipe_abc.txt" in paths
+
+    def test_patterns_only(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            patterns_dir = os.path.join(tmpdir, "patterns")
+            os.makedirs(patterns_dir)
+            with open(os.path.join(patterns_dir, "scene_abc.txt"), "w") as f:
+                f.write("Pattern: Scene Graph\nSource: test.hip")
+
+            idx_path = os.path.join(tmpdir, "combined.json")
+            index = build_combined_index(
+                docs_dir=os.path.join(tmpdir, "nonexistent_docs"),
+                patterns_dir=patterns_dir,
+                output_path=idx_path,
+            )
+            assert len(index.documents) == 1
+
+    def test_search_finds_patterns(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            patterns_dir = os.path.join(tmpdir, "patterns")
+            os.makedirs(patterns_dir)
+            with open(os.path.join(patterns_dir, "recipe_abc.txt"), "w") as f:
+                f.write("Pattern: box Recipe\nSource: test.hip\nCategory: SOP\n\nNodes:\n  box1 (SOP) [box] — size: 2")
+
+            idx_path = os.path.join(tmpdir, "combined.json")
+            index = build_combined_index(
+                docs_dir=os.path.join(tmpdir, "nonexistent"),
+                patterns_dir=patterns_dir,
+                output_path=idx_path,
+            )
+            results = index.search("box recipe SOP")
+            assert len(results) > 0
+            assert "patterns/" in results[0]["path"]

@@ -116,6 +116,43 @@ def _parse_inputs(body):
     return connections
 
 
+def _parse_comment(body):
+    """Parse a .def section → comment string (empty string if none)."""
+    text = _decode_body(body)
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("comment "):
+            # Format: comment "text here"
+            val = stripped[8:].strip().strip('"')
+            return val
+    return ""
+
+
+def _parse_postit_text(body):
+    """Parse a .postitdef section → sticky note text."""
+    text = _decode_body(body)
+    for line in text.splitlines():
+        if line.startswith("text "):
+            # Format: text "content" or text content (unquoted single word)
+            val = line[5:].strip()
+            if val.startswith('"') and val.endswith('"'):
+                val = val[1:-1]
+            return val
+    return ""
+
+
+def _parse_netbox_comment(body):
+    """Parse a .netboxinit section → network box label."""
+    text = _decode_body(body)
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("comment :="):
+            # Format: comment := "label text";
+            val = stripped[10:].strip().rstrip(";").strip().strip('"')
+            return val
+    return ""
+
+
 def _parse_parms(body):
     """Parse a .parm section → dict of {name: value}.
 
@@ -168,16 +205,16 @@ def _node_category(path):
 
 def _build_result(sections, source):
     """Build structured result from parsed cpio sections."""
-    # Collect all node paths from .init sections
+    # Collect all node paths from .init sections (skip postit nodes)
     node_info = {}  # path → {"type": str}
     for name, body in sections.items():
-        if name.endswith(".init"):
+        if name.endswith(".init") and not name.endswith(".postitinit"):
             node_path = name[:-5]  # strip .init
             node_type = _parse_init(body)
             if node_type:
                 node_info[node_path] = {"type": node_type}
 
-    # Build flat node list with parameters
+    # Build flat node list with parameters and comments
     nodes_by_path = {}
     for path, info in node_info.items():
         name = path.rsplit("/", 1)[-1]
@@ -188,7 +225,12 @@ def _build_result(sections, source):
         if parm_key in sections:
             params = _parse_parms(sections[parm_key])
 
-        nodes_by_path[path] = {
+        comment = ""
+        def_key = path + ".def"
+        if def_key in sections:
+            comment = _parse_comment(sections[def_key])
+
+        node = {
             "type": info["type"],
             "path": houdini_path,
             "name": name,
@@ -196,6 +238,10 @@ def _build_result(sections, source):
             "parameters": params,
             "children": [],
         }
+        if comment:
+            node["comment"] = comment
+
+        nodes_by_path[path] = node
 
     # Build parent-child relationships
     for path in list(nodes_by_path):
@@ -224,10 +270,43 @@ def _build_result(sections, source):
                 "dst_input": conn["dst_input"],
             })
 
+    # Extract sticky notes (.postitdef sections)
+    sticky_notes = []
+    for name, body in sections.items():
+        if name.endswith(".postitdef"):
+            note_text = _parse_postit_text(body)
+            if note_text:
+                # Derive context from path: stage/__stickynote1.postitdef → /stage
+                postit_path = name[:-10]  # strip .postitdef
+                context = "/" + (postit_path.rsplit("/", 1)[0] if "/" in postit_path else "")
+                note_name = postit_path.rsplit("/", 1)[-1]
+                sticky_notes.append({
+                    "context": context,
+                    "name": note_name,
+                    "text": note_text,
+                })
+
+    # Extract network box labels (.netboxinit sections)
+    netboxes = []
+    for name, body in sections.items():
+        if name.endswith(".netboxinit"):
+            label = _parse_netbox_comment(body)
+            if label:
+                box_path = name[:-11]  # strip .netboxinit
+                context = "/" + (box_path.rsplit("/", 1)[0] if "/" in box_path else "")
+                box_name = box_path.rsplit("/", 1)[-1]
+                netboxes.append({
+                    "context": context,
+                    "name": box_name,
+                    "label": label,
+                })
+
     return {
         "source": source,
         "nodes": list(nodes_by_path.values()),
         "connections": connections,
+        "sticky_notes": sticky_notes,
+        "netboxes": netboxes,
     }
 
 
@@ -237,8 +316,11 @@ def parse_hip_file(filepath):
     Returns:
         {
             "source": str,
-            "nodes": [{"type", "path", "name", "category", "parameters", "children"}],
+            "nodes": [{"type", "path", "name", "category", "parameters",
+                        "children", "comment"?}],
             "connections": [{"src_path", "src_output", "dst_path", "dst_input"}],
+            "sticky_notes": [{"context", "name", "text"}],
+            "netboxes": [{"context", "name", "label"}],
         }
     """
     with open(filepath, "rb") as f:

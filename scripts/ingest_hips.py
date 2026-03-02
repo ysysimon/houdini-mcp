@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """
-Houdini .hip ingest pipeline — discover, parse, and catalog.
+Houdini .hip ingest pipeline — discover, parse, extract, index, and serve.
 
 Usage:
     python scripts/ingest_hips.py discover                     # list .hip files
     python scripts/ingest_hips.py parse                        # discover + parse all
-    python scripts/ingest_hips.py parse --hfs-dir /opt/hfs21.0
-    python scripts/ingest_hips.py parse --extra-dir ~/my_hips
-    python scripts/ingest_hips.py parse --output results.json  # save to custom path
+    python scripts/ingest_hips.py extract-hdas                 # extract HDA networks via hython
+    python scripts/ingest_hips.py extract                      # merge parsed data + extract patterns
+    python scripts/ingest_hips.py index                        # build combined BM25 index
+    python scripts/ingest_hips.py all                          # full pipeline (including HDAs)
+    python scripts/ingest_hips.py --serve                      # start micro-MCP annotation server
+
+    Options for discover/parse/extract-hdas/extract/all:
+        --hfs-dir /opt/hfs21.0          Explicit $HFS path
+        --extra-dir ~/my_hips           Additional directories to scan
+        --output results.json           Custom output path for parse
 """
 
 import argparse
@@ -15,6 +22,7 @@ import glob
 import json
 import os
 import platform
+import subprocess
 import sys
 import time
 
@@ -207,6 +215,241 @@ def cmd_parse(args):
     print(f"Output:      {output_path}")
 
 
+def _find_hython(hfs_path):
+    """Find hython binary under $HFS/bin/."""
+    for name in ("hython", "hython.exe"):
+        path = os.path.join(hfs_path, "bin", name)
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def cmd_extract_hdas(args):
+    """Handle the 'extract-hdas' subcommand — extract HDA networks via hython."""
+    hfs_path = _resolve_hfs(args)
+    hython = _find_hython(hfs_path)
+    if not hython:
+        print(f"Error: hython not found under {hfs_path}/bin/", file=sys.stderr)
+        sys.exit(1)
+
+    script = os.path.join(SCRIPT_DIR, "extract_hdas.py")
+    cmd = [hython, script, "--hfs-dir", hfs_path]
+    for extra in args.extra_dir:
+        cmd.extend(["--extra-dir", extra])
+    if hasattr(args, "output") and args.output:
+        cmd.extend(["--output", args.output])
+
+    print(f"Running: {os.path.basename(hython)} {os.path.basename(script)}")
+    result = subprocess.run(cmd, env={**os.environ, "HFS": hfs_path})
+    if result.returncode != 0:
+        print("Error: HDA extraction failed.", file=sys.stderr)
+        sys.exit(result.returncode)
+
+
+def cmd_extract(args):
+    """Handle the 'extract' subcommand — merge parsed data + extract patterns."""
+    sys.path.insert(0, REPO_ROOT)
+    from hip_patterns import extract_patterns, write_patterns, build_patterns_index
+
+    # Load parsed data from both sources
+    hip_path = args.output or os.path.join(REPO_ROOT, "hip_parsed.json")
+    hda_path = os.path.join(REPO_ROOT, "hda_parsed.json")
+
+    parsed_scenes = []
+    if os.path.exists(hip_path):
+        print(f"Loading .hip data from {hip_path}")
+        with open(hip_path) as f:
+            parsed_scenes.extend(json.load(f))
+    else:
+        print("No hip_parsed.json found, running parse first...")
+        cmd_parse(args)
+        with open(hip_path) as f:
+            parsed_scenes.extend(json.load(f))
+
+    if os.path.exists(hda_path):
+        print(f"Loading .hda data from {hda_path}")
+        with open(hda_path) as f:
+            hda_scenes = json.load(f)
+        parsed_scenes.extend(hda_scenes)
+        print(f"  {len(hda_scenes)} HDA definitions loaded")
+    else:
+        print("No hda_parsed.json found (run extract-hdas to include HDAs)")
+
+    print(f"\nExtracting patterns from {len(parsed_scenes)} scenes...")
+    patterns = extract_patterns(parsed_scenes)
+
+    patterns_dir = os.path.join(REPO_ROOT, "hip_patterns")
+    count = write_patterns(patterns, patterns_dir)
+
+    index_path = os.path.join(REPO_ROOT, "hip_patterns_index.json")
+    build_patterns_index(patterns, index_path)
+
+    # Summarize by type
+    type_counts = {}
+    for p in patterns:
+        type_counts[p["type"]] = type_counts.get(p["type"], 0) + 1
+
+    print(f"\nPatterns extracted: {count}")
+    for t, c in sorted(type_counts.items()):
+        print(f"  {t}: {c}")
+    print(f"Output: {patterns_dir}")
+    print(f"Index:  {index_path}")
+
+
+def cmd_index(args):
+    """Handle the 'index' subcommand — build combined BM25 index."""
+    sys.path.insert(0, REPO_ROOT)
+    from houdini_rag import build_combined_index
+
+    index = build_combined_index()
+    print(f"Index built: {len(index.documents)} documents")
+
+
+def cmd_all(args):
+    """Handle the 'all' subcommand — full pipeline including HDAs."""
+    sys.path.insert(0, REPO_ROOT)
+
+    print("=== Step 1/5: Discover ===")
+    cmd_discover(args)
+
+    print(f"\n=== Step 2/5: Parse .hip files ===")
+    cmd_parse(args)
+
+    print(f"\n=== Step 3/5: Extract HDAs (hython) ===")
+    hfs_path = find_houdini_install(hfs_dir=args.hfs_dir)
+    hython = _find_hython(hfs_path) if hfs_path else None
+    if hython:
+        cmd_extract_hdas(args)
+    else:
+        print("Skipping: hython not found (HDA extraction requires Houdini)")
+
+    print(f"\n=== Step 4/5: Extract patterns ===")
+    cmd_extract(args)
+
+    print(f"\n=== Step 5/5: Index ===")
+    cmd_index(args)
+
+    print(f"\n{'='*60}")
+    print("Pipeline complete.")
+
+
+# ---------------------------------------------------------------------------
+# Micro-MCP annotation server (Phase 6)
+# ---------------------------------------------------------------------------
+
+def _patterns_dir():
+    return os.path.join(REPO_ROOT, "hip_patterns")
+
+
+def _patterns_index_path():
+    return os.path.join(REPO_ROOT, "hip_patterns_index.json")
+
+
+def serve_list_unannotated(limit=20):
+    """Return patterns without annotations."""
+    index_path = _patterns_index_path()
+    if not os.path.exists(index_path):
+        return {"error": "No patterns index found. Run: python scripts/ingest_hips.py extract"}
+
+    with open(index_path) as f:
+        entries = json.load(f)
+
+    pdir = _patterns_dir()
+    unannotated = []
+    for entry in entries:
+        filepath = os.path.join(pdir, f"{entry['id']}.txt")
+        if not os.path.exists(filepath):
+            continue
+        with open(filepath) as f:
+            content = f.read()
+        if "## Annotation" not in content:
+            unannotated.append(entry)
+            if len(unannotated) >= limit:
+                break
+
+    return unannotated
+
+
+def serve_get_pattern(pattern_id):
+    """Read a specific pattern file's full text."""
+    filepath = os.path.join(_patterns_dir(), f"{pattern_id}.txt")
+    if not os.path.exists(filepath):
+        return {"error": f"Pattern not found: {pattern_id}"}
+    with open(filepath) as f:
+        return {"id": pattern_id, "content": f.read()}
+
+
+def serve_annotate_pattern(pattern_id, summary):
+    """Append an ## Annotation section to a pattern file."""
+    filepath = os.path.join(_patterns_dir(), f"{pattern_id}.txt")
+    if not os.path.exists(filepath):
+        return {"error": f"Pattern not found: {pattern_id}"}
+    with open(filepath) as f:
+        content = f.read()
+    if "## Annotation" in content:
+        return {"error": f"Pattern {pattern_id} is already annotated"}
+    with open(filepath, "a") as f:
+        f.write(f"\n\n## Annotation\n{summary}\n")
+    return {"status": "ok", "id": pattern_id}
+
+
+def serve_get_progress():
+    """Return annotation progress counts."""
+    index_path = _patterns_index_path()
+    if not os.path.exists(index_path):
+        return {"annotated": 0, "total": 0, "percent": 0.0}
+
+    with open(index_path) as f:
+        entries = json.load(f)
+
+    pdir = _patterns_dir()
+    annotated = 0
+    total = len(entries)
+    for entry in entries:
+        filepath = os.path.join(pdir, f"{entry['id']}.txt")
+        if not os.path.exists(filepath):
+            continue
+        with open(filepath) as f:
+            if "## Annotation" in f.read():
+                annotated += 1
+
+    percent = (annotated / total * 100) if total > 0 else 0.0
+    return {"annotated": annotated, "total": total, "percent": round(percent, 1)}
+
+
+def cmd_serve():
+    """Start the micro-MCP annotation server on stdio."""
+    from mcp.server.fastmcp import FastMCP
+
+    mcp_server = FastMCP("HoudiniMCP Ingest")
+
+    @mcp_server.tool()
+    def list_unannotated(limit: int = 20) -> str:
+        """List patterns that haven't been annotated yet."""
+        return json.dumps(serve_list_unannotated(limit), indent=2)
+
+    @mcp_server.tool()
+    def get_pattern(pattern_id: str) -> str:
+        """Get the full text of a pattern by ID."""
+        return json.dumps(serve_get_pattern(pattern_id), indent=2)
+
+    @mcp_server.tool()
+    def annotate_pattern(pattern_id: str, summary: str) -> str:
+        """Annotate a pattern with an LLM-generated summary."""
+        return json.dumps(serve_annotate_pattern(pattern_id, summary), indent=2)
+
+    @mcp_server.tool()
+    def get_progress() -> str:
+        """Get annotation progress (annotated/total/percent)."""
+        return json.dumps(serve_get_progress(), indent=2)
+
+    mcp_server.run(transport="stdio")
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
 def _add_common_args(parser):
     """Add --hfs-dir and --extra-dir to a subparser."""
     parser.add_argument("--hfs-dir", default=None, help="Explicit $HFS path")
@@ -215,6 +458,7 @@ def _add_common_args(parser):
 
 def main():
     parser = argparse.ArgumentParser(description="Houdini .hip ingest pipeline")
+    parser.add_argument("--serve", action="store_true", help="Start micro-MCP annotation server")
     subparsers = parser.add_subparsers(dest="command")
 
     discover_parser = subparsers.add_parser("discover", help="Find Houdini install and list .hip files")
@@ -224,11 +468,37 @@ def main():
     _add_common_args(parse_parser)
     parse_parser.add_argument("--output", default=None, help="Output JSON path (default: hip_parsed.json)")
 
+    extract_hdas_parser = subparsers.add_parser("extract-hdas", help="Extract HDA networks via hython")
+    _add_common_args(extract_hdas_parser)
+    extract_hdas_parser.add_argument("--output", default=None, help="Output JSON path (default: hda_parsed.json)")
+
+    extract_parser = subparsers.add_parser("extract", help="Merge parsed data + extract patterns")
+    _add_common_args(extract_parser)
+    extract_parser.add_argument("--output", default=None, help="Output JSON path (default: hip_parsed.json)")
+
+    subparsers.add_parser("index", help="Build combined BM25 index from docs + patterns")
+
+    all_parser = subparsers.add_parser("all", help="Run full pipeline including HDAs")
+    _add_common_args(all_parser)
+    all_parser.add_argument("--output", default=None, help="Output JSON path (default: hip_parsed.json)")
+
     args = parser.parse_args()
-    if args.command == "discover":
-        cmd_discover(args)
-    elif args.command == "parse":
-        cmd_parse(args)
+
+    if args.serve:
+        cmd_serve()
+        return
+
+    commands = {
+        "discover": cmd_discover,
+        "parse": cmd_parse,
+        "extract-hdas": cmd_extract_hdas,
+        "extract": cmd_extract,
+        "index": cmd_index,
+        "all": cmd_all,
+    }
+    handler = commands.get(args.command)
+    if handler:
+        handler(args)
     else:
         parser.print_help()
 

@@ -6,6 +6,9 @@ from hip_parser import (
     _parse_init,
     _parse_inputs,
     _parse_parms,
+    _parse_comment,
+    _parse_postit_text,
+    _parse_netbox_comment,
     _node_category,
     _decode_body,
     parse_hip_bytes,
@@ -327,3 +330,123 @@ class TestParseHipBytes:
         data = _make_hip((".start", "fps 24"))
         result = parse_hip_bytes(data, source="test.hip")
         assert result["source"] == "test.hip"
+
+    def test_empty_scene_has_sticky_notes_and_netboxes(self):
+        data = _make_hip((".start", "fps 24"))
+        result = parse_hip_bytes(data)
+        assert result["sticky_notes"] == []
+        assert result["netboxes"] == []
+
+    def test_node_comment_extracted(self):
+        """Node comment from .def is included on the node dict."""
+        data = _make_hip(
+            ("obj/geo1/box1.init", "type = box"),
+            ("obj/geo1/box1.def",
+             'comment "Creates a width attribute"\nposition 0 0\ninputs\n{\n}\nend'),
+        )
+        result = parse_hip_bytes(data)
+        box = result["nodes"][0]
+        assert box["comment"] == "Creates a width attribute"
+
+    def test_node_without_comment_has_no_key(self):
+        """Nodes with empty comments should not have a 'comment' key."""
+        data = _make_hip(
+            ("obj/geo1/box1.init", "type = box"),
+            ("obj/geo1/box1.def", 'comment ""\nposition 0 0\ninputs\n{\n}\nend'),
+        )
+        result = parse_hip_bytes(data)
+        assert "comment" not in result["nodes"][0]
+
+    def test_sticky_note_extracted(self):
+        """Sticky notes from .postitdef sections are collected."""
+        data = _make_hip(
+            ("obj/geo1.init", "type = geo"),
+            ("obj/geo1.def", "inputs\n{\n}\nend"),
+            ("obj/__stickynote1.postitinit", "type = postitnote\nmatchesdef = 0"),
+            ("obj/__stickynote1.postitdef",
+             'text "Dive into the geo node"\nposition 0 0\nend'),
+        )
+        result = parse_hip_bytes(data)
+        assert len(result["sticky_notes"]) == 1
+        sn = result["sticky_notes"][0]
+        assert sn["text"] == "Dive into the geo node"
+        assert sn["context"] == "/obj"
+        assert sn["name"] == "__stickynote1"
+
+    def test_sticky_note_not_in_nodes(self):
+        """Postit nodes should not appear in the nodes list."""
+        data = _make_hip(
+            ("obj/__stickynote1.postitinit", "type = postitnote\nmatchesdef = 0"),
+            ("obj/__stickynote1.postitdef",
+             'text "Some note"\nposition 0 0\nend'),
+        )
+        result = parse_hip_bytes(data)
+        assert result["nodes"] == []
+        assert len(result["sticky_notes"]) == 1
+
+    def test_netbox_extracted(self):
+        """Network box labels from .netboxinit are collected."""
+        netbox_body = '2\n2\n{\n\tcomment := "Merge Attributes";\n\theight := 10;\n}\n{\n}'
+        data = _make_hip(
+            ("obj/topnet1/__netbox1.netboxinit", netbox_body),
+        )
+        result = parse_hip_bytes(data)
+        assert len(result["netboxes"]) == 1
+        nb = result["netboxes"][0]
+        assert nb["label"] == "Merge Attributes"
+        assert nb["context"] == "/obj/topnet1"
+        assert nb["name"] == "__netbox1"
+
+    def test_netbox_empty_comment_skipped(self):
+        netbox_body = '2\n2\n{\n\tcomment := "";\n\theight := 10;\n}\n{\n}'
+        data = _make_hip(
+            ("obj/topnet1/__netbox1.netboxinit", netbox_body),
+        )
+        result = parse_hip_bytes(data)
+        assert result["netboxes"] == []
+
+
+# ---------------------------------------------------------------------------
+# New parsers (unit tests)
+# ---------------------------------------------------------------------------
+
+class TestParseComment:
+    def test_quoted_comment(self):
+        body = b'comment "Creates a width attribute"\nposition 0 0\nend'
+        assert _parse_comment(body) == "Creates a width attribute"
+
+    def test_empty_comment(self):
+        body = b'comment ""\nposition 0 0\nend'
+        assert _parse_comment(body) == ""
+
+    def test_no_comment_line(self):
+        body = b"position 0 0\nend"
+        assert _parse_comment(body) == ""
+
+
+class TestParsePostitText:
+    def test_quoted_text(self):
+        body = b'text "Dive into the AutoDopNetwork."\nposition 0 0\nend'
+        assert _parse_postit_text(body) == "Dive into the AutoDopNetwork."
+
+    def test_unquoted_text(self):
+        body = b"text Chapters/Sections\nposition 0 0\nend"
+        assert _parse_postit_text(body) == "Chapters/Sections"
+
+    def test_empty_text(self):
+        body = b"position 0 0\nend"
+        assert _parse_postit_text(body) == ""
+
+
+class TestParseNetboxComment:
+    def test_labeled_netbox(self):
+        body = b'2\n2\n{\n\tcomment := "Split by Attribute";\n\theight := 10;\n}\n{\n}'
+        assert _parse_netbox_comment(body) == "Split by Attribute"
+
+    def test_empty_comment(self):
+        body = b'2\n2\n{\n\tcomment := "";\n\theight := 10;\n}\n{\n}'
+        assert _parse_netbox_comment(body) == ""
+
+    def test_no_comment_field(self):
+        body = b"2\n2\n{\n\theight := 10;\n}\n{\n}"
+        assert _parse_netbox_comment(body) == ""
