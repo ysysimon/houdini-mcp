@@ -13,9 +13,6 @@ import re
 _HEADER_LEN = 76
 _MAGIC = b"070707"
 
-# Node contexts (top-level network containers)
-_CONTEXTS = {"obj", "out", "ch", "shop", "img", "vex", "mat", "stage", "part"}
-
 # Context → node category mapping
 _CONTEXT_CATEGORIES = {
     "obj": "OBJ",
@@ -161,9 +158,9 @@ def _parse_parms(body):
 
 def _node_category(path):
     """Derive the node category from its path."""
-    context = path.split("/")[0]
-    # Nodes nested 2+ levels deep inside obj are SOPs by convention
     parts = path.split("/")
+    context = parts[0]
+    # Nodes nested 2+ levels deep inside obj are SOPs by convention
     if context == "obj" and len(parts) >= 3:
         return "SOP"
     return _CONTEXT_CATEGORIES.get(context, context.upper())

@@ -20,9 +20,10 @@ Each section starts with a fixed-width header:
 - Section name is null-terminated
 - Body follows immediately after the null byte
 
-The header regex: `070707[0-9]{39}(\d{9})(\d{11})`
-- Group 1: name length (9 octal digits)
-- Group 2: body length (11 octal digits)
+The layout after the 6-byte magic is: dev(6) + ino(6) + mode(6) + uid(6) +
+gid(6) + nlinks(6) + rdev(6) + mtime(11) + namesize(6) + filesize(11) = 70
+bytes, for a total header of 76 bytes. Name size is at offset 59 (6 octal
+digits), file size at offset 65 (11 octal digits).
 
 The final section is named `TRAILER!!!` and signals the end of the archive.
 

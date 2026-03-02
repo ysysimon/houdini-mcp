@@ -1,6 +1,4 @@
 """Tests for hip_parser.py — .hip cpio format parser."""
-import struct
-
 import pytest
 
 from hip_parser import (
