@@ -15,3 +15,7 @@ wheels/
 # Houdini docs (fetched via scripts/fetch_houdini_docs.py)
 houdini_docs/
 houdini_docs_index.json
+
+# Hip patterns (generated via scripts/ingest_hips.py)
+hip_patterns/
+hip_patterns_index.json
