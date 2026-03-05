@@ -5,7 +5,6 @@ Control **SideFX Houdini** from **Claude** using the **Model Context Protocol**.
 - **45 MCP tools** — nodes, rendering, geometry, PDG/TOPs, USD/Solaris, HDAs, scene management
 - **30,000+ searchable documents** — Houdini docs + patterns extracted from example files
 - **Bidirectional event system** — Houdini pushes scene changes to Claude in real time
-- **Embedded Claude terminal** — tabbed Claude Code sessions inside Houdini's UI
 
 ## Get Started
 
@@ -201,18 +200,9 @@ Claude (MCP stdio) → houdini_mcp_server.py (Bridge) → TCP:9876 → server.py
 
 </details>
 
-## Claude Terminal
-
-The plugin includes a dockable Python Panel (**Window > Python Panels > Claude Terminal**) that runs Claude Code inside Houdini. Tabbed sessions, font size control, dark/light theme, context injection via "Send Selection" and "Send Scene Info" buttons, and auto-restart on unexpected exit. Keyboard shortcuts: Ctrl+Shift+C (copy), Ctrl+=/- (font size).
-
 ## Shelf Tools
 
-The installer adds a **HoudiniMCP** shelf with two buttons:
-
-| Button | Action |
-|--------|--------|
-| **Claude Terminal** | Opens the Claude Terminal panel in a floating window |
-| **Toggle MCP Server** | Starts or stops the MCP TCP server on localhost:9876 |
+The installer adds a **HoudiniMCP** shelf with a **Toggle MCP Server** button that starts or stops the TCP server on localhost:9876.
 
 <details>
 <summary><strong>Ingest Pipeline</strong></summary>
@@ -246,7 +236,6 @@ The combined index feeds the same `search_docs` and `get_doc` MCP tools used for
 - [Getting Started](docs/GUIDE_GETTING_STARTED.md) — first-time setup walkthrough
 - [Tools Reference](docs/GUIDE_TOOLS.md) — detailed tool documentation with examples
 - [Events Guide](docs/GUIDE_EVENTS.md) — event system setup and usage
-- [Terminal Guide](docs/GUIDE_TERMINAL.md) — embedded Claude terminal features
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — common issues and fixes
 - [.hip Format Reference](docs/hip_format.md) — cpio-based .hip file format internals
 
