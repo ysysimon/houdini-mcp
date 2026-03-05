@@ -23,6 +23,10 @@ info() { echo -e "${CYAN}[..]${NC}   $1"; }
 
 echo -e "\n${BOLD}=== HoudiniMCP Bootstrap ===${NC}\n"
 
+# Houdini sets PYTHONHOME/PYTHONPATH which breaks non-Houdini Python processes.
+# Unset them so uv and pip can operate cleanly.
+unset PYTHONHOME PYTHONPATH
+
 OS="$(uname -s)"
 case "$OS" in
     Linux)  os_label="Linux" ;;
@@ -44,7 +48,7 @@ else
     exit 1
 fi
 
-# Python 3.12+ (required)
+# Python 3.10+ (required)
 PYTHON=""
 for cmd in python3 python; do
     if command -v "$cmd" &>/dev/null; then
@@ -52,7 +56,7 @@ for cmd in python3 python; do
         if [ -n "$py_ver" ]; then
             major="${py_ver%%.*}"
             minor="${py_ver##*.}"
-            if [ "$major" -ge 3 ] && [ "$minor" -ge 12 ]; then
+            if [ "$major" -ge 3 ] && [ "$minor" -ge 10 ]; then
                 PYTHON="$cmd"
                 break
             fi
@@ -63,7 +67,7 @@ done
 if [ -n "$PYTHON" ]; then
     ok "Python found: $($PYTHON --version)"
 else
-    fail "Python 3.12+ is required but not found."
+    fail "Python 3.10+ is required but not found."
     echo "  Install from https://www.python.org/downloads/"
     exit 1
 fi
@@ -180,9 +184,23 @@ else
 fi
 
 # -------------------------------------------------------
-# Step 7: Configure MCP client
+# Step 7: Ingest pipeline (discover + parse + extract + index)
 # -------------------------------------------------------
-echo -e "\n${BOLD}Step 7: MCP client configuration${NC}"
+echo -e "\n${BOLD}Step 7: Ingest pipeline (patterns + combined index)${NC}"
+
+if [ "$HOUDINI_FOUND" = true ]; then
+    info "Running ingest pipeline (discover → parse → extract → index)..."
+    uv run python scripts/ingest_hips.py all
+    ok "Ingest complete — combined index built (docs + patterns)"
+else
+    warn "Houdini not detected — skipping ingest pipeline"
+    echo "  Run later: uv run python scripts/ingest_hips.py all"
+fi
+
+# -------------------------------------------------------
+# Step 8: Configure MCP client
+# -------------------------------------------------------
+echo -e "\n${BOLD}Step 8: MCP client configuration${NC}"
 
 HAVE_CLAUDE_CODE=false
 HAVE_CLAUDE_DESKTOP=false
@@ -222,7 +240,7 @@ fi
 
 configure_claude_code() {
     info "Configuring Claude Code MCP server..."
-    claude mcp remove houdini 2>/dev/null || true
+    claude mcp remove houdini --scope user 2>/dev/null || true
     claude mcp add --transport stdio --scope user houdini -- \
         uv --directory "$REPO_DIR" run python houdini_mcp_server.py
     ok "Claude Code configured (verify with: claude mcp list)"
@@ -303,8 +321,14 @@ fi
 echo -e "\n${BOLD}${GREEN}=== Setup complete! ===${NC}"
 echo -e "  Repo:   ${REPO_DIR}"
 echo -e "  Venv:   ${REPO_DIR}/.venv/"
+if [ -f "houdini_docs_index.json" ]; then
+    doc_count=$("$PYTHON" -c "import json; d=json.load(open('houdini_docs_index.json')); print(len(d.get('documents',d.get('docs',[]))))" 2>/dev/null || echo "?")
+    echo -e "  Index:  ${doc_count} searchable documents (docs + patterns)"
+fi
 if [ "$HOUDINI_FOUND" = false ]; then
     echo -e "  ${YELLOW}Remember to install the Houdini plugin after installing Houdini:${NC}"
     echo -e "    cd ${REPO_DIR} && uv run python scripts/install.py"
+    echo -e "  ${YELLOW}Then run the ingest pipeline for pattern search:${NC}"
+    echo -e "    cd ${REPO_DIR} && uv run python scripts/ingest_hips.py all"
 fi
 echo ""

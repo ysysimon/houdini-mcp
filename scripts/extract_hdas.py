@@ -87,6 +87,9 @@ def _create_parent(hou, category_name):
     return obj
 
 
+_UI_ONLY_TYPES = {"Folder", "FolderSet", "Separator", "Label", "Button"}
+
+
 def _extract_one(hou, hda_path):
     """Extract a single HDA file → list of result dicts (one per definition)."""
     hou.hipFile.clear(suppress_save_prompt=True)
@@ -113,6 +116,9 @@ def _extract_one(hou, hda_path):
             parms = {}
             for p in child.parms():
                 try:
+                    tmpl_type = p.parmTemplate().type().name()
+                    if tmpl_type in _UI_ONLY_TYPES:
+                        continue
                     if not p.isAtDefault():
                         val = p.eval()
                         if isinstance(val, (int, float, str)):

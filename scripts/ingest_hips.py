@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Houdini .hip ingest pipeline — discover, parse, extract, index, and serve.
+Houdini .hip ingest pipeline — discover, parse, extract, and index.
 
 Usage:
     python scripts/ingest_hips.py discover                     # list .hip files
@@ -9,7 +9,6 @@ Usage:
     python scripts/ingest_hips.py extract                      # merge parsed data + extract patterns
     python scripts/ingest_hips.py index                        # build combined BM25 index
     python scripts/ingest_hips.py all                          # full pipeline (including HDAs)
-    python scripts/ingest_hips.py --serve                      # start micro-MCP annotation server
 
     Options for discover/parse/extract-hdas/extract/all:
         --hfs-dir /opt/hfs21.0          Explicit $HFS path
@@ -163,8 +162,8 @@ def cmd_discover(args):
     print_summary(files, hfs_path)
 
 
-def cmd_parse(args):
-    """Handle the 'parse' subcommand — discover + parse all .hip files."""
+def _cmd_parse_cpio(args):
+    """Parse .hip files using the cpio parser (no Houdini required)."""
     sys.path.insert(0, REPO_ROOT)
     from hip_parser import parse_hip_file
 
@@ -177,7 +176,7 @@ def cmd_parse(args):
         return
 
     print(f"Houdini install: {hfs_path}")
-    print(f"Parsing {len(hip_files)} .hip files...\n")
+    print(f"Parsing {len(hip_files)} .hip files (cpio fallback)...\n")
 
     results = []
     total_nodes = 0
@@ -213,6 +212,35 @@ def cmd_parse(args):
     print(f"Total conns: {total_conns}")
     print(f"Time:        {elapsed:.1f}s")
     print(f"Output:      {output_path}")
+
+
+def _cmd_parse_hython(args, hfs_path, hython):
+    """Parse .hip files using hython (filtered parameters)."""
+    script = os.path.join(SCRIPT_DIR, "parse_hips.py")
+    cmd = [hython, script, "--hfs-dir", hfs_path]
+    for extra in args.extra_dir:
+        cmd.extend(["--extra-dir", extra])
+    if hasattr(args, "output") and args.output:
+        cmd.extend(["--output", args.output])
+    workers = getattr(args, "workers", 0)
+    cmd.extend(["--workers", str(workers)])
+
+    print(f"Running: {os.path.basename(hython)} {os.path.basename(script)}")
+    result = subprocess.run(cmd, env={**os.environ, "HFS": hfs_path})
+    if result.returncode != 0:
+        print("Error: hython parsing failed.", file=sys.stderr)
+        sys.exit(result.returncode)
+
+
+def cmd_parse(args):
+    """Handle the 'parse' subcommand — hython if available, cpio fallback."""
+    hfs_path = _resolve_hfs(args)
+    hython = _find_hython(hfs_path)
+    if hython:
+        _cmd_parse_hython(args, hfs_path, hython)
+    else:
+        print("Warning: hython not found — using cpio parser (no parameter filtering)")
+        _cmd_parse_cpio(args)
 
 
 def _find_hython(hfs_path):
@@ -336,119 +364,6 @@ def cmd_all(args):
 
 
 # ---------------------------------------------------------------------------
-# Micro-MCP annotation server (Phase 6)
-# ---------------------------------------------------------------------------
-
-def _patterns_dir():
-    return os.path.join(REPO_ROOT, "hip_patterns")
-
-
-def _patterns_index_path():
-    return os.path.join(REPO_ROOT, "hip_patterns_index.json")
-
-
-def serve_list_unannotated(limit=20):
-    """Return patterns without annotations."""
-    index_path = _patterns_index_path()
-    if not os.path.exists(index_path):
-        return {"error": "No patterns index found. Run: python scripts/ingest_hips.py extract"}
-
-    with open(index_path) as f:
-        entries = json.load(f)
-
-    pdir = _patterns_dir()
-    unannotated = []
-    for entry in entries:
-        filepath = os.path.join(pdir, f"{entry['id']}.txt")
-        if not os.path.exists(filepath):
-            continue
-        with open(filepath) as f:
-            content = f.read()
-        if "## Annotation" not in content:
-            unannotated.append(entry)
-            if len(unannotated) >= limit:
-                break
-
-    return unannotated
-
-
-def serve_get_pattern(pattern_id):
-    """Read a specific pattern file's full text."""
-    filepath = os.path.join(_patterns_dir(), f"{pattern_id}.txt")
-    if not os.path.exists(filepath):
-        return {"error": f"Pattern not found: {pattern_id}"}
-    with open(filepath) as f:
-        return {"id": pattern_id, "content": f.read()}
-
-
-def serve_annotate_pattern(pattern_id, summary):
-    """Append an ## Annotation section to a pattern file."""
-    filepath = os.path.join(_patterns_dir(), f"{pattern_id}.txt")
-    if not os.path.exists(filepath):
-        return {"error": f"Pattern not found: {pattern_id}"}
-    with open(filepath) as f:
-        content = f.read()
-    if "## Annotation" in content:
-        return {"error": f"Pattern {pattern_id} is already annotated"}
-    with open(filepath, "a") as f:
-        f.write(f"\n\n## Annotation\n{summary}\n")
-    return {"status": "ok", "id": pattern_id}
-
-
-def serve_get_progress():
-    """Return annotation progress counts."""
-    index_path = _patterns_index_path()
-    if not os.path.exists(index_path):
-        return {"annotated": 0, "total": 0, "percent": 0.0}
-
-    with open(index_path) as f:
-        entries = json.load(f)
-
-    pdir = _patterns_dir()
-    annotated = 0
-    total = len(entries)
-    for entry in entries:
-        filepath = os.path.join(pdir, f"{entry['id']}.txt")
-        if not os.path.exists(filepath):
-            continue
-        with open(filepath) as f:
-            if "## Annotation" in f.read():
-                annotated += 1
-
-    percent = (annotated / total * 100) if total > 0 else 0.0
-    return {"annotated": annotated, "total": total, "percent": round(percent, 1)}
-
-
-def cmd_serve():
-    """Start the micro-MCP annotation server on stdio."""
-    from mcp.server.fastmcp import FastMCP
-
-    mcp_server = FastMCP("HoudiniMCP Ingest")
-
-    @mcp_server.tool()
-    def list_unannotated(limit: int = 20) -> str:
-        """List patterns that haven't been annotated yet."""
-        return json.dumps(serve_list_unannotated(limit), indent=2)
-
-    @mcp_server.tool()
-    def get_pattern(pattern_id: str) -> str:
-        """Get the full text of a pattern by ID."""
-        return json.dumps(serve_get_pattern(pattern_id), indent=2)
-
-    @mcp_server.tool()
-    def annotate_pattern(pattern_id: str, summary: str) -> str:
-        """Annotate a pattern with an LLM-generated summary."""
-        return json.dumps(serve_annotate_pattern(pattern_id, summary), indent=2)
-
-    @mcp_server.tool()
-    def get_progress() -> str:
-        """Get annotation progress (annotated/total/percent)."""
-        return json.dumps(serve_get_progress(), indent=2)
-
-    mcp_server.run(transport="stdio")
-
-
-# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -460,7 +375,6 @@ def _add_common_args(parser):
 
 def main():
     parser = argparse.ArgumentParser(description="Houdini .hip ingest pipeline")
-    parser.add_argument("--serve", action="store_true", help="Start micro-MCP annotation server")
     subparsers = parser.add_subparsers(dest="command")
 
     discover_parser = subparsers.add_parser("discover", help="Find Houdini install and list .hip files")
@@ -469,6 +383,7 @@ def main():
     parse_parser = subparsers.add_parser("parse", help="Discover + parse all .hip files")
     _add_common_args(parse_parser)
     parse_parser.add_argument("--output", default=None, help="Output JSON path (default: hip_parsed.json)")
+    parse_parser.add_argument("--workers", type=int, default=0, help="Parallel workers for hython parsing (0=auto, 1=serial)")
 
     extract_hdas_parser = subparsers.add_parser("extract-hdas", help="Extract HDA networks via hython")
     _add_common_args(extract_hdas_parser)
@@ -487,10 +402,6 @@ def main():
     all_parser.add_argument("--workers", type=int, default=0, help="Parallel workers for HDA extraction (0=auto, 1=serial)")
 
     args = parser.parse_args()
-
-    if args.serve:
-        cmd_serve()
-        return
 
     commands = {
         "discover": cmd_discover,
