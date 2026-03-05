@@ -82,10 +82,6 @@ def _format_annotations(scene, context=None):
     return lines
 
 
-# ---------------------------------------------------------------------------
-# Pattern extractors
-# ---------------------------------------------------------------------------
-
 def _extract_scene_graph(scene):
     """Extract one scene-graph pattern per source file."""
     source = scene["source"]
@@ -322,10 +318,6 @@ def _extract_recipes(scene):
 
     return recipes
 
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 def extract_patterns(parsed_scenes):
     """Extract all pattern types from a list of parsed scene dicts.

@@ -135,10 +135,6 @@ class HoudiniMCPServer:
         except Exception as e:
             print(f"Server error: {str(e)}")
 
-    # -------------------------------------------------------------------------
-    # Command Handling
-    # -------------------------------------------------------------------------
-
     def execute_command(self, command):
         """Entry point for executing a JSON command from the client."""
         try:
@@ -220,10 +216,6 @@ class HoudiniMCPServer:
         result = handler(**params)
         print(f"Handler execution complete for {cmd_type}")
         return {"status": "success", "result": result}
-
-    # -------------------------------------------------------------------------
-    # Handlers that need self (ping, batch, asset placeholders)
-    # -------------------------------------------------------------------------
 
     def ping(self):
         """Simple health check that returns server status."""

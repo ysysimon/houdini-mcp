@@ -48,7 +48,6 @@ def _read_sections(data):
         if name_end > length:
             break
 
-        # Name is null-terminated
         name = data[name_start:name_end].rstrip(b"\x00").decode("ascii", errors="replace")
 
         body_start = name_end

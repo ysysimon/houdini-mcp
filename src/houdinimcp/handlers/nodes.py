@@ -1,6 +1,4 @@
 """Node CRUD, wiring, flags, layout, and material handlers."""
-import traceback
-
 import hou
 
 
@@ -190,71 +188,66 @@ def set_node_color(node_path, color):
 
 def set_material(node_path, material_type="principledshader", name=None, parameters=None):
     """Creates or applies a material to an OBJ node."""
-    try:
-        target_node = hou.node(node_path)
-        if not target_node:
-            raise ValueError(f"Node not found: {node_path}")
+    target_node = hou.node(node_path)
+    if not target_node:
+        raise ValueError(f"Node not found: {node_path}")
 
-        if target_node.type().category().name() != "Object":
-            raise ValueError(
-                f"Node {node_path} is not an OBJ-level node and cannot accept direct materials."
+    if target_node.type().category().name() != "Object":
+        raise ValueError(
+            f"Node {node_path} is not an OBJ-level node and cannot accept direct materials."
+        )
+
+    mat_context = hou.node("/mat")
+    if not mat_context:
+        mat_context = hou.node("/shop")
+        if not mat_context:
+            raise RuntimeError("No /mat or /shop context found to create materials.")
+
+    mat_name = name or (f"{material_type}_auto")
+    mat_node = mat_context.node(mat_name)
+    if not mat_node:
+        mat_node = mat_context.createNode(material_type, mat_name)
+
+    if parameters:
+        for k, v in parameters.items():
+            p = mat_node.parm(k)
+            if p:
+                p.set(v)
+
+    mat_parm = target_node.parm("shop_materialpath")
+    if mat_parm:
+        mat_parm.set(mat_node.path())
+    else:
+        geo_sop = target_node.node("geometry")
+        if not geo_sop:
+            raise RuntimeError("No 'geometry' node found inside OBJ to apply material to.")
+
+        material_sop = geo_sop.node("material1")
+        if not material_sop:
+            material_sop = geo_sop.createNode("material", "material1")
+            first_sop = None
+            for c in geo_sop.children():
+                if c.isDisplayFlagSet():
+                    first_sop = c
+                    break
+            if first_sop:
+                material_sop.setFirstInput(first_sop)
+            material_sop.setDisplayFlag(True)
+            material_sop.setRenderFlag(True)
+
+        mat_sop_parm = material_sop.parm("shop_materialpath1")
+        if mat_sop_parm:
+            mat_sop_parm.set(mat_node.path())
+        else:
+            raise RuntimeError(
+                "No shop_materialpath1 on Material SOP to assign the material."
             )
 
-        mat_context = hou.node("/mat")
-        if not mat_context:
-            mat_context = hou.node("/shop")
-            if not mat_context:
-                raise RuntimeError("No /mat or /shop context found to create materials.")
-
-        mat_name = name or (f"{material_type}_auto")
-        mat_node = mat_context.node(mat_name)
-        if not mat_node:
-            mat_node = mat_context.createNode(material_type, mat_name)
-
-        if parameters:
-            for k, v in parameters.items():
-                p = mat_node.parm(k)
-                if p:
-                    p.set(v)
-
-        mat_parm = target_node.parm("shop_materialpath")
-        if mat_parm:
-            mat_parm.set(mat_node.path())
-        else:
-            geo_sop = target_node.node("geometry")
-            if not geo_sop:
-                raise RuntimeError("No 'geometry' node found inside OBJ to apply material to.")
-
-            material_sop = geo_sop.node("material1")
-            if not material_sop:
-                material_sop = geo_sop.createNode("material", "material1")
-                first_sop = None
-                for c in geo_sop.children():
-                    if c.isDisplayFlagSet():
-                        first_sop = c
-                        break
-                if first_sop:
-                    material_sop.setFirstInput(first_sop)
-                material_sop.setDisplayFlag(True)
-                material_sop.setRenderFlag(True)
-
-            mat_sop_parm = material_sop.parm("shop_materialpath1")
-            if mat_sop_parm:
-                mat_sop_parm.set(mat_node.path())
-            else:
-                raise RuntimeError(
-                    "No shop_materialpath1 on Material SOP to assign the material."
-                )
-
-        return {
-            "status": "ok",
-            "material_node": mat_node.path(),
-            "applied_to": target_node.path(),
-        }
-
-    except Exception as e:
-        traceback.print_exc()
-        return {"status": "error", "message": str(e), "node": node_path}
+    return {
+        "status": "ok",
+        "material_node": mat_node.path(),
+        "applied_to": target_node.path(),
+    }
 
 
 def set_expression(node_path, parm_name, expression, language="hscript"):
