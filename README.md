@@ -1,28 +1,15 @@
-# HoudiniMCP – Connect Houdini to Claude via Model Context Protocol
+# HoudiniMCP
 
-**HoudiniMCP** allows you to control **SideFX Houdini** from **Claude** using the **Model Context Protocol (MCP)**. It provides:
+Control **SideFX Houdini** from **Claude** using the **Model Context Protocol**.
 
-- **41 MCP tools** for nodes, rendering, geometry, PDG/TOPs, USD/Solaris, HDAs, scene management, and more
-- **Offline documentation search** (BM25) across 11,000+ Houdini doc pages
-- **Event system** for bidirectional communication (Houdini pushes scene changes to Claude)
-- **Embedded Claude terminal** panel inside Houdini's UI with tabbed sessions
+- **45 MCP tools** — nodes, rendering, geometry, PDG/TOPs, USD/Solaris, HDAs, scene management
+- **30,000+ searchable documents** — Houdini docs + patterns extracted from example files
+- **Bidirectional event system** — Houdini pushes scene changes to Claude in real time
+- **Embedded Claude terminal** — tabbed Claude Code sessions inside Houdini's UI
 
-## Architecture
+## Get Started
 
-```
-Claude (MCP stdio) → houdini_mcp_server.py (Bridge) → TCP:9876 → server.py (Houdini Plugin) → hou API
-                   ↘ houdini_rag.py (docs search, local)
-```
-
----
-
-## Quick Start
-
-### Install Size
-
-The full install (repo, venv, dependencies, and Houdini offline docs) is approximately **~1 GB**, most of which is the documentation corpus for offline search.
-
-### One-Liner Install
+**Prerequisites:** git and Python 3.10+. Houdini is optional at setup time.
 
 **Linux / macOS:**
 ```bash
@@ -34,9 +21,7 @@ curl -sSL https://raw.githubusercontent.com/kleer001/houdini-mcp/main/bootstrap.
 powershell -c "irm https://raw.githubusercontent.com/kleer001/houdini-mcp/main/bootstrap.bat -OutFile bootstrap.bat; .\bootstrap.bat"
 ```
 
-The bootstrap script handles everything: clones the repo, installs [uv](https://docs.astral.sh/uv/), creates a venv, installs deps, sets up the Houdini plugin, optionally downloads offline docs, and configures your MCP client (Claude Code or Claude Desktop). Re-run from inside the repo at any time — it's idempotent.
-
-**Prerequisites:** git and Python 3.12+ must be installed. Houdini is optional at setup time.
+The bootstrap script clones the repo, installs [uv](https://docs.astral.sh/uv/), creates a venv, installs deps, sets up the Houdini plugin, optionally downloads offline docs, and configures your MCP client. Re-run from inside the repo at any time — it's idempotent. Full install is ~1 GB (mostly the documentation corpus).
 
 <details>
 <summary><strong>Manual setup (step by step)</strong></summary>
@@ -104,10 +89,18 @@ This enables the `search_docs` and `get_doc` tools — they work offline without
 
 </details>
 
----
+## What You Get
+
+HoudiniMCP exposes 45 tools over MCP, organized by domain: scene management, node operations, code execution, materials, parameters, geometry, rendering, PDG/TOPs, USD/Solaris, HDA management, batch operations, events, and documentation search. The bridge runs as a separate process (`houdini_mcp_server.py`) and talks to the Houdini plugin over TCP.
+
+```
+Claude (MCP stdio) → houdini_mcp_server.py (Bridge) → TCP:9876 → server.py (Houdini Plugin) → hou API
+                   ↘ houdini_rag.py (BM25 search — docs + patterns, local-only)
+                   ↖ scripts/ingest_hips.py (pattern extraction from .hip files)
+```
 
 <details>
-<summary><strong>MCP Tools Reference (41 tools)</strong></summary>
+<summary><strong>All 45 MCP Tools</strong></summary>
 
 ### Scene Management
 | Tool | Description |
@@ -161,6 +154,7 @@ This enables the `search_docs` and `get_doc` tools — they work offline without
 | `render_quad_views` | Render 4 canonical views |
 | `render_specific_camera` | Render from a specific camera node |
 | `render_flipbook` | Render a flipbook sequence |
+| `monitor_render` | Check if a Karma/Mantra render is still running |
 
 ### PDG/TOPs
 | Tool | Description |
@@ -202,37 +196,70 @@ This enables the `search_docs` and `get_doc` tools — they work offline without
 ### Documentation Search (offline)
 | Tool | Description |
 |------|-------------|
-| `search_docs` | BM25 search across Houdini docs (no Houdini needed) |
+| `search_docs` | BM25 search across 30,000+ documents (no Houdini needed) |
 | `get_doc` | Read full content of a doc page |
 
 </details>
 
----
+## Claude Terminal
 
-## Embedded Claude Terminal
-
-The plugin includes a dockable Python Panel that runs Claude Code inside Houdini:
-
-- **Window > Python Panels > Claude Terminal**
-- Tabbed sessions, font size control, dark/light theme
-- Context injection: "Send Selection" and "Send Scene Info" buttons
-- Auto-restart on unexpected exit
-- Keyboard shortcuts: Ctrl+Shift+C (copy), Ctrl+=/- (font size)
-
----
+The plugin includes a dockable Python Panel (**Window > Python Panels > Claude Terminal**) that runs Claude Code inside Houdini. Tabbed sessions, font size control, dark/light theme, context injection via "Send Selection" and "Send Scene Info" buttons, and auto-restart on unexpected exit. Keyboard shortcuts: Ctrl+Shift+C (copy), Ctrl+=/- (font size).
 
 ## Shelf Tools
 
-The installer adds a **HoudiniMCP** shelf to Houdini's toolbar with two buttons:
+The installer adds a **HoudiniMCP** shelf with two buttons:
 
-| Button | Icon | Action |
-|--------|------|--------|
-| **Claude Terminal** | IM_NewViewport | Opens the Claude Terminal panel in a floating window |
-| **Toggle MCP Server** | BUTTONS_connected | Starts or stops the MCP TCP server on localhost:9876 |
+| Button | Action |
+|--------|--------|
+| **Claude Terminal** | Opens the Claude Terminal panel in a floating window |
+| **Toggle MCP Server** | Starts or stops the MCP TCP server on localhost:9876 |
 
-The shelf is installed automatically by `scripts/install.py` (or the bootstrap script).
+<details>
+<summary><strong>Ingest Pipeline</strong></summary>
 
----
+The ingest pipeline extracts reusable patterns from Houdini's own example `.hip` files and HDA definitions, then indexes them alongside the documentation corpus for BM25 search.
+
+```bash
+# Run the full pipeline (discover → parse → extract HDAs → extract patterns → index)
+python scripts/ingest_hips.py all
+
+# Or run individual stages
+python scripts/ingest_hips.py discover    # Find .hip files in Houdini install
+python scripts/ingest_hips.py parse       # Parse .hip files (cpio format, no Houdini needed)
+python scripts/ingest_hips.py extract-hdas # Extract HDA networks (requires hython)
+python scripts/ingest_hips.py extract     # Extract patterns (scene graphs, subgraphs, recipes)
+python scripts/ingest_hips.py index       # Build combined BM25 index (docs + patterns)
+```
+
+Pattern types extracted:
+- **Scene graphs** — full node hierarchies from each .hip file
+- **Subgraphs** — connected node clusters, deduplicated by topology
+- **Recipes** — individual node configurations with parameter values
+
+The combined index feeds the same `search_docs` and `get_doc` MCP tools used for documentation search.
+
+</details>
+
+<details>
+<summary><strong>Documentation & Guides</strong></summary>
+
+- [Getting Started](docs/GUIDE_GETTING_STARTED.md) — first-time setup walkthrough
+- [Tools Reference](docs/GUIDE_TOOLS.md) — detailed tool documentation with examples
+- [Events Guide](docs/GUIDE_EVENTS.md) — event system setup and usage
+- [Terminal Guide](docs/GUIDE_TERMINAL.md) — embedded Claude terminal features
+- [Troubleshooting](docs/TROUBLESHOOTING.md) — common issues and fixes
+- [.hip Format Reference](docs/hip_format.md) — cpio-based .hip file format internals
+
+</details>
+
+## Under the Hood
+
+- **Zero external deps for search** — BM25 engine is pure stdlib Python, no numpy/scipy/nltk
+- **Cpio parser for .hip files** — reads Houdini's binary scene format without Houdini installed
+- **19,000+ patterns** extracted from Houdini's own example files, searchable alongside 11,000+ doc pages
+- **Event deduplication** collapses rapid-fire callbacks (same type + path within 100ms)
+- **Undo groups** wrap all mutating commands, dangerous code patterns blocked by default
+- **227 tests**, all run without a Houdini instance
 
 ## Acknowledgements
 
@@ -242,3 +269,7 @@ HoudiniMCP builds on the work of several open-source projects:
 - [capoomgit/houdini-mcp](https://github.com/capoomgit/houdini-mcp) by capoomgit — first full-featured Houdini MCP implementation
 - [eetumartola/houdini-mcp](https://github.com/eetumartola/houdini-mcp) by eetumartola — early Houdini MCP implementation
 - [Houdini21MCP](https://github.com/orrzxz/Houdini21MCP) by orrzxz — documentation search engine
+
+## License
+
+MIT
