@@ -20,10 +20,10 @@
 
 ---
 
-Control **SideFX Houdini** from **Claude** using the **Model Context Protocol**.
+Control **SideFX Houdini** from **Claude** using the **Model Context Protocol**. HoudiniMCP connects to your running Houdini instance — your license, your scene, your tools. The bridge talks to Houdini's Python API over a local TCP socket, so everything runs on your machine against your own installation.
 
 - **166 MCP tools** — nodes, rendering, geometry, PDG/TOPs, USD/Solaris, HDAs, scene management, parameters, animation, VEX, DOPs, viewport, COPs, CHOPs, takes, cache, workflows
-- **30,000+ searchable documents** — Houdini docs + patterns extracted from example files
+- **30,000+ searchable documents** — Houdini docs + patterns extracted from your Houdini install's example files
 - **Bidirectional event system** — Houdini pushes scene changes to Claude in real time
 
 ## Get Started
