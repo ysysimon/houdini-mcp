@@ -474,6 +474,8 @@ Every entry follows the same format: **what we tried, what surprised us, and wha
 
 This file is baked into Claude's context, so the AI builds on previous experience instead of starting from scratch. The more you use HoudiniMCP, the smarter it gets.
 
+**Got recipes to share?** As you work with HoudiniMCP, your AI will add entries to its own `BEST_PRACTICES.md`. If you've accumulated useful ones, [open an issue](https://github.com/kleer001/houdini-mcp/issues/new?labels=best-practice&title=Best+Practices+Contribution&body=Paste+your+BEST_PRACTICES.md+contents+below%0A%0A---%0A%0A) and paste your file — we'll merge the good stuff in for everyone.
+
 ## Under the Hood
 
 - **Zero external deps for search** — BM25 engine is pure stdlib Python, no numpy/scipy/nltk
