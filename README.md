@@ -498,3 +498,7 @@ HoudiniMCP builds on the work of several open-source projects:
 ## License
 
 MIT
+
+---
+
+<sub>HoudiniMCP is an independent community project and is not affiliated with, endorsed by, or sponsored by SideFX Software. Houdini and SideFX are trademarks of SideFX Software Inc.</sub>
