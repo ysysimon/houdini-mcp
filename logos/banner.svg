@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 260" width="900" height="260">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;600&amp;display=swap');
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="260" rx="12" fill="#111111"/>
+
+  <!-- Logo (centered vertically, left side) -->
+  <g transform="translate(50, 30) scale(1)">
+    <circle cx="100" cy="100" r="94" fill="#1a1a1a"/>
+    <g stroke="#E8600A" stroke-width="13" stroke-linecap="round" fill="none">
+      <path d="M 100,100 C 96,74 116,52 100,30 C 84,8 50,20 52,48 C 54,68 72,74 80,62"/>
+      <path d="M 100,100 C 96,74 116,52 100,30 C 84,8 50,20 52,48 C 54,68 72,74 80,62" transform="rotate(120 100 100)"/>
+      <path d="M 100,100 C 96,74 116,52 100,30 C 84,8 50,20 52,48 C 54,68 72,74 80,62" transform="rotate(240 100 100)"/>
+    </g>
+    <circle cx="100" cy="100" r="7" fill="#E8600A"/>
+    <circle cx="100" cy="100" r="94" stroke="#E8600A" stroke-width="2" fill="none"/>
+  </g>
+
+  <!-- Project name -->
+  <text x="290" y="80" font-family="Inter, Helvetica, Arial, sans-serif" font-weight="600" font-size="40" fill="#ffffff" letter-spacing="1">HoudiniMCP</text>
+
+  <!-- Tagline line 1 -->
+  <text x="290" y="140" font-family="Inter, Helvetica, Arial, sans-serif" font-weight="600" font-size="28" fill="#E8600A">Talk to Houdini.</text>
+
+  <!-- Tagline line 2 -->
+  <text x="290" y="185" font-family="Inter, Helvetica, Arial, sans-serif" font-weight="300" font-size="20" fill="#999999">Every Node. Every Parameter. One Conversation.</text>
+
+  <!-- Subtle bottom accent line -->
+  <rect x="290" y="210" width="120" height="2" rx="1" fill="#E8600A" opacity="0.6"/>
+</svg>

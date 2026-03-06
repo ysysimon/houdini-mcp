@@ -1,4 +1,25 @@
-# HoudiniMCP
+<p align="center">
+  <img src="logos/banner_light.svg" alt="HoudiniMCP — Talk to Houdini." width="700"/>
+</p>
+
+<p align="center">
+  <a href="https://github.com/kleer001/houdini-mcp/blob/main/LICENSE"><img src="https://img.shields.io/github/license/kleer001/houdini-mcp?color=blue" alt="License: MIT"/></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white" alt="Python 3.10+"/></a>
+  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-compatible-green?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJ3aGl0ZSI+PHBhdGggZD0iTTEyIDJDNi40OCAyIDIgNi40OCAyIDEyczQuNDggMTAgMTAgMTAgMTAtNC40OCAxMC0xMFMxNy41MiAyIDEyIDJ6Ii8+PC9zdmc+" alt="MCP Compatible"/></a>
+  <a href="https://www.sidefx.com/"><img src="https://img.shields.io/badge/Houdini-21.0-orange?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJ3aGl0ZSI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiLz48L3N2Zz4=&logoColor=white" alt="Houdini 21.0"/></a>
+  <a href="https://github.com/kleer001/houdini-mcp/actions"><img src="https://img.shields.io/github/actions/workflow/status/kleer001/houdini-mcp/ci.yml?branch=main&label=tests" alt="Tests"/></a>
+  <a href="https://github.com/kleer001/houdini-mcp/commits/main"><img src="https://img.shields.io/github/last-commit/kleer001/houdini-mcp" alt="Last Commit"/></a>
+  <a href="https://github.com/kleer001/houdini-mcp/issues"><img src="https://img.shields.io/github/issues/kleer001/houdini-mcp" alt="Issues"/></a>
+  <a href="https://github.com/kleer001/houdini-mcp/network/members"><img src="https://img.shields.io/github/forks/kleer001/houdini-mcp?style=social" alt="Forks"/></a>
+  <a href="https://github.com/kleer001/houdini-mcp/watchers"><img src="https://img.shields.io/github/watchers/kleer001/houdini-mcp?style=social" alt="Watchers"/></a>
+  <a href="https://github.com/kleer001/houdini-mcp/stargazers"><img src="https://img.shields.io/github/stars/kleer001/houdini-mcp?style=social" alt="GitHub Stars"/></a>
+</p>
+
+<p align="center">
+  <strong>166 MCP tools</strong> &middot; <strong>30,000+ searchable documents</strong> &middot; <strong>Bidirectional events</strong>
+</p>
+
+---
 
 Control **SideFX Houdini** from **Claude** using the **Model Context Protocol**.
 
