@@ -75,8 +75,61 @@ _hou_mock.exprLanguage = types.SimpleNamespace(
 _hou_mock.Color = lambda r, g, b: (r, g, b)
 _hou_mock.nodeTypeCategories = lambda: {}
 _hou_mock.hda = types.SimpleNamespace(
-    installFile=lambda f: None,
+    installFile=lambda f, **kw: None,
+    uninstallFile=lambda f: None,
     definitionsInFile=lambda f: [],
+)
+# Animation / playbar extras
+_hou_mock.time = lambda: 0.0
+_hou_mock.intFrame = lambda: 1
+_hou_mock.playbar.setFrameRange = lambda s, e: None
+_hou_mock.playbar.setPlaybackRange = lambda s, e: None
+_hou_mock.playbar.play = lambda: None
+_hou_mock.playbar.stop = lambda: None
+_hou_mock.playbar.reverse = lambda: None
+_hou_mock.Keyframe = type("Keyframe", (), {
+    "__init__": lambda self: None,
+    "setFrame": lambda self, f: None,
+    "setValue": lambda self, v: None,
+    "frame": lambda self: 0,
+    "value": lambda self: 0,
+})
+# HScript
+_hou_mock.hscript = lambda cmd: ("", "")
+_hou_mock.hscriptExpression = lambda expr: 0
+_hou_mock.expressionGlobals = lambda: {}
+_hou_mock.getenv = lambda name: ""
+# VEX
+_hou_mock.text = types.SimpleNamespace(vexSyntaxCheck=lambda code: "")
+# Parm templates
+_hou_mock.FloatParmTemplate = lambda *a, **kw: None
+_hou_mock.IntParmTemplate = lambda *a, **kw: None
+_hou_mock.StringParmTemplate = lambda *a, **kw: None
+_hou_mock.ToggleParmTemplate = lambda *a, **kw: None
+_hou_mock.OperationFailed = type("OperationFailed", (Exception,), {})
+# Geometry extras
+_hou_mock.Vector3 = lambda pos: pos
+_hou_mock.attribType = types.SimpleNamespace(Global=0, Point=1, Prim=2)
+# Viewport extras
+_hou_mock.glShadingType = types.SimpleNamespace(Wire=0, Flat=1, Smooth=2, SmoothWire=3)
+_hou_mock.viewportGuide = types.SimpleNamespace(NodeGuides=0)
+_hou_mock.geometryViewportType = types.SimpleNamespace(
+    Perspective=0, Front=1, Back=2, Left=3, Right=4, Top=5, Bottom=6,
+)
+# Selected nodes
+_hou_mock.selectedNodes = lambda: []
+# copyNodesTo / moveNodesTo
+_hou_mock.copyNodesTo = lambda nodes, parent: nodes
+_hou_mock.moveNodesTo = lambda nodes, parent: nodes
+# Takes
+_mock_take = types.SimpleNamespace(
+    name=lambda: "Main", isCurrent=lambda: True, setCurrent=lambda: None,
+    children=lambda: [], parmTuples=lambda: [],
+)
+_hou_mock.takes = types.SimpleNamespace(
+    takes=lambda: [_mock_take],
+    currentTake=lambda: _mock_take,
+    addTake=lambda name, parent=None: _mock_take,
 )
 _hou_mock.ui = types.SimpleNamespace(
     paneTabOfType=lambda t: None,
@@ -157,6 +210,33 @@ class TestCommandDispatcher:
             "set_frame", "layout_children", "set_node_color",
             "pdg_cook", "pdg_dirty", "pdg_cancel",
             "lop_import", "hda_install", "hda_create", "batch",
+            # Phase 1
+            "set_selection", "set_parameter", "set_parameters",
+            "revert_parameter", "link_parameters", "lock_parameter",
+            "create_spare_parameter", "create_spare_parameters",
+            # Phase 2
+            "copy_node", "move_node", "rename_node", "connect_nodes_batch",
+            "reorder_inputs", "set_detail_attrib", "execute_hscript",
+            # Phase 3
+            "set_keyframe", "set_keyframes", "delete_keyframe",
+            "set_frame_range", "set_playback_range", "playbar_control",
+            "create_wrangle", "set_wrangle_code", "create_vex_expression",
+            "create_material_network", "assign_material",
+            # Phase 4
+            "step_simulation", "reset_simulation",
+            "set_viewport_camera", "set_viewport_display", "set_viewport_renderer",
+            "frame_selection", "frame_all", "set_viewport_direction", "set_current_network",
+            "set_render_settings", "create_render_node", "start_render",
+            # Phase 5
+            "create_cop_node", "set_cop_flags",
+            "create_chop_node", "export_chop_to_parm",
+            "set_current_take", "create_take",
+            "clear_cache", "write_cache",
+            "uninstall_hda", "reload_hda", "update_hda", "set_hda_section_content",
+            # Phase 6
+            "set_usd_attribute", "create_lop_node",
+            "setup_pyro_sim", "setup_rbd_sim", "setup_flip_sim", "setup_vellum_sim",
+            "create_material_workflow", "assign_material_workflow", "build_sop_chain", "setup_render",
         }
         assert expected == HoudiniMCPServer.MUTATING_COMMANDS
 
@@ -256,6 +336,7 @@ class TestCommandDispatcher:
         """Every expected command type should have a handler."""
         handlers = self.server._get_handlers()
         expected = [
+            # Original
             "ping", "get_scene_info", "create_node", "modify_node",
             "delete_node", "get_node_info", "execute_code", "set_material",
             "connect_nodes", "disconnect_node_input", "set_node_flags",
@@ -268,6 +349,52 @@ class TestCommandDispatcher:
             "batch", "get_pending_events", "subscribe_events",
             "render_single_view", "render_quad_view",
             "render_specific_camera", "render_flipbook",
+            # Phase 1 — Context + Parameters
+            "get_network_overview", "get_cook_chain", "explain_node",
+            "get_scene_summary", "get_selection", "set_selection",
+            "get_parameter", "set_parameter", "set_parameters",
+            "get_parameter_schema", "get_expression", "revert_parameter",
+            "link_parameters", "lock_parameter",
+            "create_spare_parameter", "create_spare_parameters",
+            # Phase 2 — Nodes + Geometry + Code
+            "copy_node", "move_node", "rename_node", "list_children",
+            "find_nodes", "list_node_types", "connect_nodes_batch", "reorder_inputs",
+            "get_points", "get_prims", "get_attrib_values", "set_detail_attrib",
+            "get_groups", "get_group_members", "get_bounding_box",
+            "get_prim_intrinsics", "find_nearest_point",
+            "execute_hscript", "evaluate_expression", "get_env_variable",
+            # Phase 3 — Animation + VEX + Materials
+            "set_keyframe", "set_keyframes", "delete_keyframe", "get_keyframes",
+            "get_frame", "set_frame_range", "set_playback_range", "playbar_control",
+            "create_wrangle", "set_wrangle_code", "get_wrangle_code",
+            "create_vex_expression", "validate_vex",
+            "list_materials", "get_material_info", "create_material_network",
+            "assign_material", "list_material_types",
+            # Phase 4 — DOPs + Viewport + Rendering
+            "get_simulation_info", "list_dop_objects", "get_dop_object",
+            "get_dop_field", "get_dop_relationships",
+            "step_simulation", "reset_simulation", "get_sim_memory_usage",
+            "list_panes", "get_viewport_info", "set_viewport_camera",
+            "set_viewport_display", "set_viewport_renderer",
+            "frame_selection", "frame_all", "set_viewport_direction",
+            "capture_screenshot", "set_current_network",
+            "list_render_nodes", "get_render_settings", "set_render_settings",
+            "create_render_node", "start_render", "get_render_progress",
+            # Phase 5 — COPs + CHOPs + Takes + Cache + HDA
+            "get_cop_info", "get_cop_geometry", "get_cop_layer",
+            "create_cop_node", "set_cop_flags", "list_cop_node_types", "get_cop_vdb",
+            "get_chop_data", "create_chop_node", "list_chop_channels", "export_chop_to_parm",
+            "list_takes", "get_current_take", "set_current_take", "create_take",
+            "list_caches", "get_cache_status", "clear_cache", "write_cache",
+            "uninstall_hda", "reload_hda", "update_hda",
+            "get_hda_sections", "get_hda_section_content", "set_hda_section_content",
+            # Phase 6 — USD + Workflow
+            "list_usd_prims", "get_usd_attribute", "set_usd_attribute",
+            "get_usd_prim_stats", "get_last_modified_prims", "create_lop_node",
+            "get_usd_composition", "get_usd_variants", "inspect_usd_layer", "list_lights",
+            "setup_pyro_sim", "setup_rbd_sim", "setup_flip_sim", "setup_vellum_sim",
+            "create_material_workflow", "assign_material_workflow",
+            "build_sop_chain", "setup_render",
         ]
         for cmd in expected:
             assert cmd in handlers, f"Handler not registered: {cmd}"

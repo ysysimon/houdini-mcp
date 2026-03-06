@@ -25,6 +25,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 HoudiniMCP is a Model Context Protocol (MCP) bridge connecting SideFX Houdini to Claude AI. It provides 41+ MCP tools for programmatic Houdini control — node operations, rendering, geometry, PDG/TOPs, USD/Solaris, HDA management, scene management, offline docs search, and a bidirectional event system.
 
+## Best Practices
+
+See **[BEST_PRACTICES.md](BEST_PRACTICES.md)** for hard-won lessons from production use — Copernicus COP pitfalls, ImageLayer creation, temporal effects, diagnostics workflow, and more. Organized by context (COPs, SOPs, etc.) so you can jump to what's relevant.
+
 ## Repo Structure
 
 ```
@@ -219,6 +223,27 @@ Before proposing code changes, pass these checks.
 - [ ] Verification ran and passed
 
 ---
+
+## Contributing to Best Practices
+
+When you discover a **non-trivial** Houdini behavior while working through this MCP — silent failures, undocumented API quirks, metadata requirements, required parameter ordering, etc. — add it to [`BEST_PRACTICES.md`](BEST_PRACTICES.md).
+
+**What qualifies as non-trivial:**
+- Behavior that has no error message (silent failure)
+- API usage where parameter order or metadata matters but isn't documented
+- Workarounds for missing Houdini features (e.g., no timeshift in Copernicus)
+- Anything that took multiple attempts to diagnose
+
+**How to add it:**
+1. **Read `BEST_PRACTICES.md` first** — check that the item isn't already covered
+2. Place it under the appropriate context section (COPs, SOPs, LOPs, TOPs, etc.)
+3. Create the section if it doesn't exist yet
+4. Add an entry to the Index at the top of the file
+5. **Include the Houdini version** (e.g., `> Houdini 21.0.631`) — behaviors change between releases
+6. **Use anti-pattern format** when applicable: "Tried X, it silently failed, do Y instead"
+7. Be brief: problem, symptom, fix. A few sentences, not paragraphs. Code snippets only when the syntax is the non-obvious part
+
+Do **not** add trivial items (standard API usage, well-documented behavior, one-off bugs).
 
 ## Code Style
 

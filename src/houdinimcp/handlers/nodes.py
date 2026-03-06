@@ -268,6 +268,134 @@ def set_expression(node_path, parm_name, expression, language="hscript"):
     }
 
 
+def copy_node(path, destination_path):
+    """Copy a node to a new parent."""
+    node = hou.node(path)
+    if not node:
+        raise ValueError(f"Node not found: {path}")
+    dest = hou.node(destination_path)
+    if not dest:
+        raise ValueError(f"Destination not found: {destination_path}")
+    items = hou.copyNodesTo([node], dest)
+    new_node = items[0]
+    return {"path": new_node.path(), "name": new_node.name(), "type": new_node.type().name()}
+
+
+def move_node(path, destination_path):
+    """Move a node to a new parent."""
+    node = hou.node(path)
+    if not node:
+        raise ValueError(f"Node not found: {path}")
+    dest = hou.node(destination_path)
+    if not dest:
+        raise ValueError(f"Destination not found: {destination_path}")
+    items = hou.moveNodesTo([node], dest)
+    new_node = items[0]
+    return {"path": new_node.path(), "name": new_node.name(), "type": new_node.type().name()}
+
+
+def rename_node(path, new_name):
+    """Rename a node."""
+    node = hou.node(path)
+    if not node:
+        raise ValueError(f"Node not found: {path}")
+    old_name = node.name()
+    node.setName(new_name)
+    return {"old_name": old_name, "new_name": node.name(), "path": node.path()}
+
+
+def list_children(path, recursive=False):
+    """List all children of a node."""
+    node = hou.node(path)
+    if not node:
+        raise ValueError(f"Node not found: {path}")
+    if recursive:
+        children = node.allSubChildren()
+    else:
+        children = node.children()
+    nodes = []
+    for child in children:
+        nodes.append({
+            "name": child.name(),
+            "path": child.path(),
+            "type": child.type().name(),
+        })
+    return {"path": path, "count": len(nodes), "children": nodes}
+
+
+def find_nodes(pattern, node_type=None, root_path="/"):
+    """Find nodes matching a name pattern, optionally filtered by type."""
+    root = hou.node(root_path)
+    if not root:
+        raise ValueError(f"Root not found: {root_path}")
+    matches = root.glob(pattern)
+    nodes = []
+    for n in matches:
+        if node_type and n.type().name() != node_type:
+            continue
+        nodes.append({
+            "name": n.name(),
+            "path": n.path(),
+            "type": n.type().name(),
+        })
+    return {"pattern": pattern, "count": len(nodes), "nodes": nodes}
+
+
+def list_node_types(category=None):
+    """List available node types, optionally filtered by category."""
+    result = []
+    for cat_name, cat in hou.nodeTypeCategories().items():
+        if category and cat_name != category:
+            continue
+        for name, nt in cat.nodeTypes().items():
+            result.append({
+                "name": name,
+                "category": cat_name,
+                "label": nt.description(),
+            })
+        if len(result) >= 500:
+            break
+    return {"count": len(result), "types": result}
+
+
+def connect_nodes_batch(connections):
+    """Connect multiple node pairs at once.
+
+    connections: list of dicts with src_path, dst_path, dst_input_index, src_output_index
+    """
+    results = []
+    for conn in connections:
+        src = hou.node(conn["src_path"])
+        dst = hou.node(conn["dst_path"])
+        if not src:
+            raise ValueError(f"Source not found: {conn['src_path']}")
+        if not dst:
+            raise ValueError(f"Destination not found: {conn['dst_path']}")
+        dst.setInput(conn.get("dst_input_index", 0), src, conn.get("src_output_index", 0))
+        results.append({
+            "src": src.path(), "dst": dst.path(),
+            "dst_input": conn.get("dst_input_index", 0),
+        })
+    return {"connected": len(results), "connections": results}
+
+
+def reorder_inputs(path, input_indices):
+    """Reorder the inputs of a node by specifying the new index order."""
+    node = hou.node(path)
+    if not node:
+        raise ValueError(f"Node not found: {path}")
+    current_inputs = list(node.inputs())
+    new_inputs = []
+    for idx in input_indices:
+        if idx is not None and idx < len(current_inputs):
+            new_inputs.append(current_inputs[idx])
+        else:
+            new_inputs.append(None)
+    for i, inp in enumerate(new_inputs):
+        node.setInput(i, inp)
+    return {"path": node.path(), "new_order": input_indices}
+
+
 def find_error_nodes(root_path="/obj"):
     """Scan node hierarchy for cook errors and warnings."""
     root = hou.node(root_path)

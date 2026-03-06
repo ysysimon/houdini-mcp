@@ -2,7 +2,7 @@
 
 Control **SideFX Houdini** from **Claude** using the **Model Context Protocol**.
 
-- **45 MCP tools** — nodes, rendering, geometry, PDG/TOPs, USD/Solaris, HDAs, scene management
+- **166 MCP tools** — nodes, rendering, geometry, PDG/TOPs, USD/Solaris, HDAs, scene management, parameters, animation, VEX, DOPs, viewport, COPs, CHOPs, takes, cache, workflows
 - **30,000+ searchable documents** — Houdini docs + patterns extracted from example files
 - **Bidirectional event system** — Houdini pushes scene changes to Claude in real time
 
@@ -133,7 +133,7 @@ This enables the `search_docs` and `get_doc` tools — they work offline without
 
 ## What You Get
 
-HoudiniMCP exposes 45 tools over MCP, organized by domain: scene management, node operations, code execution, materials, parameters, geometry, rendering, PDG/TOPs, USD/Solaris, HDA management, batch operations, events, and documentation search. The bridge runs as a separate process (`houdini_mcp_server.py`) and talks to the Houdini plugin over TCP.
+HoudiniMCP exposes 166 tools, 8 resources, and 6 prompts over MCP, organized by domain: scene management, node operations, scene context, parameters, code execution, materials, animation, VEX, geometry, rendering, viewport, DOPs, PDG/TOPs, USD/Solaris, COPs, CHOPs, takes, cache, HDA management, batch operations, workflow templates, events, and documentation search. The bridge runs as a separate process (`houdini_mcp_server.py`) and talks to the Houdini plugin over TCP.
 
 ```
 Claude (MCP stdio) → houdini_mcp_server.py (Bridge) → TCP:9876 → server.py (Houdini Plugin) → hou API
@@ -142,9 +142,9 @@ Claude (MCP stdio) → houdini_mcp_server.py (Bridge) → TCP:9876 → server.py
 ```
 
 <details>
-<summary><strong>All 45 MCP Tools</strong></summary>
+<summary><strong>All 166 MCP Tools</strong></summary>
 
-### Scene Management
+### Scene Management (6)
 | Tool | Description |
 |------|-------------|
 | `ping` | Health check — verify Houdini is connected |
@@ -154,7 +154,17 @@ Claude (MCP stdio) → houdini_mcp_server.py (Bridge) → TCP:9876 → server.py
 | `load_scene` | Load a .hip file |
 | `set_frame` | Set the playbar frame |
 
-### Node Operations
+### Scene Context (6)
+| Tool | Description |
+|------|-------------|
+| `get_network_overview` | Overview of a network's children and connections |
+| `get_cook_chain` | Trace upstream cook dependency chain |
+| `explain_node` | Human-readable summary of a node's role |
+| `get_scene_summary` | High-level scene statistics |
+| `get_selection` | Get currently selected nodes |
+| `set_selection` | Set the node selection |
+
+### Node Operations (18)
 | Tool | Description |
 |------|-------------|
 | `create_node` | Create a node (type, parent, name) |
@@ -167,29 +177,85 @@ Claude (MCP stdio) → houdini_mcp_server.py (Bridge) → TCP:9876 → server.py
 | `set_node_color` | Set a node's color [r, g, b] |
 | `layout_children` | Auto-layout child nodes |
 | `find_error_nodes` | Scan hierarchy for cook errors |
+| `copy_node` | Copy a node to a new parent |
+| `move_node` | Move a node to a new parent |
+| `rename_node` | Rename a node |
+| `list_children` | List children of a node |
+| `find_nodes` | Search for nodes by type/name pattern |
+| `list_node_types` | List available node types for a context |
+| `connect_nodes_batch` | Connect multiple node pairs at once |
+| `reorder_inputs` | Reorder a node's input connections |
 
-### Code Execution
+### Parameters (10)
+| Tool | Description |
+|------|-------------|
+| `get_parameter` | Read a single parameter value |
+| `set_parameter` | Set a single parameter value |
+| `set_parameters` | Set multiple parameters at once |
+| `get_parameter_schema` | Get parameter metadata (type, range, menu items) |
+| `get_expression` | Get the expression on a parameter |
+| `revert_parameter` | Revert a parameter to its default |
+| `link_parameters` | Create a channel reference between parameters |
+| `lock_parameter` | Lock or unlock a parameter |
+| `create_spare_parameter` | Add a spare parameter to a node |
+| `create_spare_parameters` | Add multiple spare parameters at once |
+
+### Code Execution (4)
 | Tool | Description |
 |------|-------------|
 | `execute_houdini_code` | Run Python code in Houdini (with safety guard) |
+| `execute_hscript` | Run HScript commands |
+| `evaluate_expression` | Evaluate an HScript or Python expression |
+| `get_env_variable` | Get a Houdini environment variable |
 
-### Materials
+### Materials (6)
 | Tool | Description |
 |------|-------------|
 | `set_material` | Create or apply a material to an OBJ node |
+| `list_materials` | List all materials in a context |
+| `get_material_info` | Get material parameters and properties |
+| `create_material_network` | Create a material network with a shader |
+| `assign_material` | Assign a material to geometry |
+| `list_material_types` | List available material/shader types |
 
-### Parameters & Animation
+### Animation (9)
 | Tool | Description |
 |------|-------------|
 | `set_expression` | Set an HScript or Python expression on a parm |
+| `set_keyframe` | Set a keyframe on a parameter |
+| `set_keyframes` | Set multiple keyframes at once |
+| `delete_keyframe` | Delete a keyframe at a frame |
+| `get_keyframes` | Get all keyframes on a parameter |
+| `get_frame` | Get the current frame |
+| `set_frame_range` | Set the global frame range |
+| `set_playback_range` | Set the playback frame range |
+| `playbar_control` | Control playbar (play, stop, reverse, step) |
 
-### Geometry
+### VEX (5)
+| Tool | Description |
+|------|-------------|
+| `create_wrangle` | Create an attribute wrangle node with VEX code |
+| `set_wrangle_code` | Set VEX code on an existing wrangle |
+| `get_wrangle_code` | Get VEX code from a wrangle |
+| `create_vex_expression` | Create a wrangle with a VEX expression |
+| `validate_vex` | Validate VEX syntax |
+
+### Geometry (11)
 | Tool | Description |
 |------|-------------|
 | `get_geo_summary` | Point/prim/vertex counts, bbox, attributes |
 | `geo_export` | Export geometry (obj, gltf, glb, usd, ply, bgeo.sc) |
+| `get_points` | Get point positions and attributes (paginated) |
+| `get_prims` | Get primitive data and attributes (paginated) |
+| `get_attrib_values` | Get attribute values for all elements |
+| `set_detail_attrib` | Set a detail attribute value |
+| `get_groups` | List point/prim groups |
+| `get_group_members` | Get members of a group |
+| `get_bounding_box` | Get geometry bounding box |
+| `get_prim_intrinsics` | Get primitive intrinsic values |
+| `find_nearest_point` | Find the nearest point to a position |
 
-### Rendering
+### Rendering (11)
 | Tool | Description |
 |------|-------------|
 | `render_single_view` | Render a single viewport (OpenGL/Karma/Mantra) |
@@ -197,8 +263,40 @@ Claude (MCP stdio) → houdini_mcp_server.py (Bridge) → TCP:9876 → server.py
 | `render_specific_camera` | Render from a specific camera node |
 | `render_flipbook` | Render a flipbook sequence |
 | `monitor_render` | Check if a Karma/Mantra render is still running |
+| `list_render_nodes` | List all ROP nodes in /out |
+| `get_render_settings` | Get render node parameters |
+| `set_render_settings` | Set render node parameters |
+| `create_render_node` | Create a new ROP node |
+| `start_render` | Start a render from a ROP node |
+| `get_render_progress` | Get render progress percentage |
 
-### PDG/TOPs
+### Viewport (10)
+| Tool | Description |
+|------|-------------|
+| `list_panes` | List all pane tabs in the desktop |
+| `get_viewport_info` | Get viewport settings and camera info |
+| `set_viewport_camera` | Set the viewport camera |
+| `set_viewport_display` | Set viewport display options |
+| `set_viewport_renderer` | Set viewport renderer (OpenGL, Karma, etc.) |
+| `frame_selection` | Frame the viewport on selected nodes |
+| `frame_all` | Frame all geometry in the viewport |
+| `set_viewport_direction` | Set viewport to a standard direction |
+| `capture_screenshot` | Capture a viewport screenshot |
+| `set_current_network` | Set the current network editor path |
+
+### DOPs (8)
+| Tool | Description |
+|------|-------------|
+| `get_simulation_info` | Get simulation status and properties |
+| `list_dop_objects` | List objects in a DOP simulation |
+| `get_dop_object` | Get details of a DOP object |
+| `get_dop_field` | Get a DOP field's data/stats |
+| `get_dop_relationships` | Get DOP object relationships |
+| `step_simulation` | Advance simulation by N frames |
+| `reset_simulation` | Reset simulation to start frame |
+| `get_sim_memory_usage` | Get simulation memory usage |
+
+### PDG/TOPs (5)
 | Tool | Description |
 |------|-------------|
 | `pdg_cook` | Start cooking a TOP network |
@@ -207,7 +305,7 @@ Claude (MCP stdio) → houdini_mcp_server.py (Bridge) → TCP:9876 → server.py
 | `pdg_dirty` | Dirty work items for re-cooking |
 | `pdg_cancel` | Cancel a running PDG cook |
 
-### USD/Solaris (LOP)
+### USD/Solaris (15)
 | Tool | Description |
 |------|-------------|
 | `lop_stage_info` | USD stage summary (prims, layers, time) |
@@ -215,27 +313,90 @@ Claude (MCP stdio) → houdini_mcp_server.py (Bridge) → TCP:9876 → server.py
 | `lop_prim_search` | Search prims by pattern and type |
 | `lop_layer_info` | USD layer stack info |
 | `lop_import` | Import USD via reference or sublayer |
+| `list_usd_prims` | List USD prims with hierarchy traversal |
+| `get_usd_attribute` | Get a USD prim attribute value |
+| `set_usd_attribute` | Set a USD prim attribute value |
+| `get_usd_prim_stats` | Get USD prim statistics |
+| `get_last_modified_prims` | Get recently modified prims |
+| `create_lop_node` | Create a LOP node |
+| `get_usd_composition` | Get USD composition arcs |
+| `get_usd_variants` | Get USD variant sets and selections |
+| `inspect_usd_layer` | Inspect a USD layer |
+| `list_lights` | List lights in the USD stage |
 
-### HDA Management
+### COPs (7)
+| Tool | Description |
+|------|-------------|
+| `get_cop_info` | Get COP node info and planes |
+| `get_cop_geometry` | Get COP geometry data |
+| `get_cop_layer` | Get COP layer/plane info |
+| `create_cop_node` | Create a COP node |
+| `set_cop_flags` | Set COP node flags |
+| `list_cop_node_types` | List available COP node types |
+| `get_cop_vdb` | Get COP VDB volume info |
+
+### CHOPs (4)
+| Tool | Description |
+|------|-------------|
+| `get_chop_data` | Get CHOP channel data and samples |
+| `create_chop_node` | Create a CHOP node |
+| `list_chop_channels` | List channels in a CHOP node |
+| `export_chop_to_parm` | Export a CHOP channel to a parameter |
+
+### Takes (4)
+| Tool | Description |
+|------|-------------|
+| `list_takes` | List all takes in the scene |
+| `get_current_take` | Get the current take |
+| `set_current_take` | Set the current take |
+| `create_take` | Create a new take |
+
+### Cache (4)
+| Tool | Description |
+|------|-------------|
+| `list_caches` | List all cache nodes in the scene |
+| `get_cache_status` | Get cache node status |
+| `clear_cache` | Clear a cache node |
+| `write_cache` | Write/execute a cache node |
+
+### HDA Management (10)
 | Tool | Description |
 |------|-------------|
 | `hda_list` | List available HDA definitions |
 | `hda_get` | Detailed info about an HDA |
 | `hda_install` | Install an HDA file into the session |
 | `hda_create` | Create an HDA from an existing node |
+| `uninstall_hda` | Uninstall an HDA definition |
+| `reload_hda` | Reload an HDA from disk |
+| `update_hda` | Update an HDA definition from a node |
+| `get_hda_sections` | List sections in an HDA |
+| `get_hda_section_content` | Read content of an HDA section |
+| `set_hda_section_content` | Write content to an HDA section |
 
-### Batch Operations
+### Workflow Templates (8)
+| Tool | Description |
+|------|-------------|
+| `setup_pyro_sim` | Set up a Pyro simulation from source geometry |
+| `setup_rbd_sim` | Set up an RBD simulation from source geometry |
+| `setup_flip_sim` | Set up a FLIP fluid simulation |
+| `setup_vellum_sim` | Set up a Vellum simulation (cloth, hair, grain) |
+| `create_material_workflow` | Create a material in a material context |
+| `assign_material_workflow` | Assign a material to geometry |
+| `build_sop_chain` | Build a chain of connected SOP nodes |
+| `setup_render` | Set up a render node with camera and output |
+
+### Batch Operations (1)
 | Tool | Description |
 |------|-------------|
 | `batch` | Execute multiple operations atomically |
 
-### Event System
+### Event System (2)
 | Tool | Description |
 |------|-------------|
 | `get_houdini_events` | Get pending Houdini events (scene/node/frame changes) |
 | `subscribe_houdini_events` | Configure which event types to collect |
 
-### Documentation Search (offline)
+### Documentation Search (2)
 | Tool | Description |
 |------|-------------|
 | `search_docs` | BM25 search across 30,000+ documents (no Houdini needed) |
@@ -276,6 +437,7 @@ The combined index feeds the same `search_docs` and `get_doc` MCP tools used for
 <details>
 <summary><strong>Documentation & Guides</strong></summary>
 
+- [Best Practices](BEST_PRACTICES.md) — hard-won lessons from production use (COP pitfalls, diagnostics, etc.)
 - [Getting Started](docs/GUIDE_GETTING_STARTED.md) — first-time setup walkthrough
 - [Tools Reference](docs/GUIDE_TOOLS.md) — detailed tool documentation with examples
 - [Events Guide](docs/GUIDE_EVENTS.md) — event system setup and usage
@@ -291,7 +453,7 @@ The combined index feeds the same `search_docs` and `get_doc` MCP tools used for
 - **19,000+ patterns** extracted from Houdini's own example files, searchable alongside 11,000+ doc pages
 - **Event deduplication** collapses rapid-fire callbacks (same type + path within 100ms)
 - **Undo groups** wrap all mutating commands, dangerous code patterns blocked by default
-- **227 tests**, all run without a Houdini instance
+- **256 tests**, all run without a Houdini instance
 
 ## Acknowledgements
 
@@ -301,6 +463,7 @@ HoudiniMCP builds on the work of several open-source projects:
 - [capoomgit/houdini-mcp](https://github.com/capoomgit/houdini-mcp) by capoomgit — first full-featured Houdini MCP implementation
 - [eetumartola/houdini-mcp](https://github.com/eetumartola/houdini-mcp) by eetumartola — early Houdini MCP implementation
 - [Houdini21MCP](https://github.com/orrzxz/Houdini21MCP) by orrzxz — documentation search engine
+- [fxhoudinimcp](https://github.com/healkeiser/fxhoudinimcp) by healkeiser — comprehensive Houdini MCP with 167 tools across 19 categories (MIT license)
 
 ## License
 

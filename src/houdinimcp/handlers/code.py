@@ -1,5 +1,6 @@
 """Code execution handler with dangerous pattern guard."""
 import io
+import os
 import sys
 import traceback
 from contextlib import redirect_stdout, redirect_stderr
@@ -38,3 +39,25 @@ def execute_code(code, allow_dangerous=False):
         traceback.print_exc(file=sys.stderr)
         print("--- End Error ---", file=sys.stderr)
         raise Exception(f"Code execution error: {str(e)}")
+
+
+def execute_hscript(command):
+    """Execute an HScript command and return the output."""
+    result = hou.hscript(command)
+    return {"stdout": result[0], "stderr": result[1]}
+
+
+def evaluate_expression(expression, language="hscript"):
+    """Evaluate a Houdini expression and return the result."""
+    if language == "python":
+        result = hou.expressionGlobals()
+        val = eval(expression, result)
+    else:
+        val = hou.hscriptExpression(expression)
+    return {"expression": expression, "result": str(val), "language": language}
+
+
+def get_env_variable(name):
+    """Get a Houdini environment variable ($HIP, $JOB, etc.)."""
+    val = hou.getenv(name)
+    return {"name": name, "value": val}
