@@ -466,6 +466,14 @@ The combined index feeds the same `search_docs` and `get_doc` MCP tools used for
 
 </details>
 
+## Best Practices — The Recipe Book
+
+Houdini is deep software, and the best way to learn it is from someone who's already been there. [**BEST_PRACTICES.md**](BEST_PRACTICES.md) is a growing collection of practical recipes — the kind of knowledge that saves you hours.
+
+Every entry follows the same format: **what we tried, what surprised us, and what works.** Tagged with the Houdini version so you know what applies to you.
+
+This file is baked into Claude's context, so the AI builds on previous experience instead of starting from scratch. The more you use HoudiniMCP, the smarter it gets.
+
 ## Under the Hood
 
 - **Zero external deps for search** — BM25 engine is pure stdlib Python, no numpy/scipy/nltk
