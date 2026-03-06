@@ -77,6 +77,49 @@ claude mcp add --transport stdio houdini -- uv --directory /path/to/houdini-mcp 
 }
 ```
 
+**ChatGPT Desktop:** ChatGPT only supports remote (HTTP) MCP servers, not local stdio. You'll need to wrap the bridge in an HTTP transport and expose it via a tunnel:
+
+```bash
+# 1. Run the MCP server with HTTP transport (requires mcp[cli])
+uv --directory /path/to/houdini-mcp run fastmcp run houdini_mcp_server.py --transport http --port 8080
+
+# 2. Expose it with ngrok (or Cloudflare Tunnel, etc.)
+ngrok http 8080
+```
+
+Then in ChatGPT: **Settings > Connectors > Create** — paste the ngrok HTTPS URL as the Connector URL.
+
+**Ollama (local LLM):** Ollama doesn't have a built-in MCP client. Use [ollama-mcp-bridge](https://github.com/jonigl/ollama-mcp-bridge) to connect:
+
+```bash
+pip install ollama-mcp-bridge
+```
+
+Create `mcp-config.json`:
+
+```json
+{
+  "mcpServers": {
+    "houdini": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/houdini-mcp",
+        "run",
+        "python",
+        "houdini_mcp_server.py"
+      ]
+    }
+  }
+}
+```
+
+```bash
+ollama-mcp-bridge --config ./mcp-config.json
+```
+
+The bridge proxies Ollama's API and routes tool calls to HoudiniMCP automatically.
+
 #### 4. Set Up Documentation Search
 
 ```bash
