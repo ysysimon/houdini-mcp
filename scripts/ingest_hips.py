@@ -164,7 +164,7 @@ def cmd_discover(args):
 
 def _cmd_parse_cpio(args):
     """Parse .hip files using the cpio parser (no Houdini required)."""
-    sys.path.insert(0, REPO_ROOT)
+    sys.path.insert(0, SCRIPT_DIR)
     from hip_parser import parse_hip_file
 
     hfs_path = _resolve_hfs(args)
@@ -278,7 +278,7 @@ def cmd_extract_hdas(args):
 
 def cmd_extract(args):
     """Handle the 'extract' subcommand — merge parsed data + extract patterns."""
-    sys.path.insert(0, REPO_ROOT)
+    sys.path.insert(0, SCRIPT_DIR)
     from hip_patterns import extract_patterns, write_patterns, build_patterns_index
 
     # Load parsed data from both sources

@@ -1,5 +1,10 @@
 """Tests for hip_parser.py — .hip cpio format parser."""
+import os
+import sys
+
 import pytest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 from hip_parser import (
     _read_sections,
