@@ -12,6 +12,14 @@ Hard-won lessons from real production use of the Houdini MCP. Organized by conte
   - [Python Snippet COP](#python-snippet-cop)
   - [Temporal Access (Time-Shifting)](#temporal-access-time-shifting)
   - [Node Categories](#node-categories)
+  - [COP HDA Output Naming](#cop-hda-output-naming)
+  - [Resolution Mismatch at Sequence Boundaries](#resolution-mismatch-at-sequence-boundaries)
+  - [HDA matchCurrentDefinition Resets Internals](#hda-matchcurrentdefinition-resets-internals)
+- [COP2 (Legacy Compositing)](#cop2-legacy-compositing)
+  - [COP2 VEX Filter Custom Shaders](#cop2-vex-filter-custom-shaders)
+  - [Copernicus to COP2 Translation](#copernicus-to-cop2-translation)
+  - [COP2 File Node Frame Range](#cop2-file-node-frame-range)
+- [Merge / Blend Mode Math Reference](#merge--blend-mode-math-reference)
 - [General MCP Usage](#general-mcp-usage)
   - [Connection Discipline](#connection-discipline)
   - [Node Inspection Caveats](#node-inspection-caveats)
@@ -131,6 +139,130 @@ parent = hou.node("/path/to/copnet")
 for name in sorted(parent.childTypeCategory().nodeTypes().keys()):
     print(name)
 ```
+
+### COP HDA Output Naming
+
+> Houdini 21.0.631
+
+**For COP HDAs, `outputNames()` is controlled by the `output` line in the DialogScript section of the HDA definition — NOT by the `outputname#` multiparm parm.**
+
+**Anti-pattern:** Created a COP HDA with `outputname1` multiparm (matching the null node pattern) and set it to `"mono"`. `outputNames()` still returned `('output1',)` — the default connector name from the DialogScript. Downstream Layer Merge silently ignored the HDA's output.
+
+**Diagnosis:** Read the HDA's DialogScript section: `hda_def.sections()['DialogScript'].contents()`. Look for the `output` line (format: `output <connector_name> <label>`).
+
+**Fix:** Modify the DialogScript's `output` line to set the desired layer name:
+
+```python
+hda_def = node.type().definition()
+ds = hda_def.sections()['DialogScript'].contents()
+ds = ds.replace('output\toutput1\tC', 'output\tlayer\tlayer')
+hda_def.sections()['DialogScript'].setContents(ds)
+node.matchCurrentDefinition()
+```
+
+**Note:** The `outputname#` multiparm on a COP HDA has no effect on `outputNames()`. It works on built-in nodes like `null` because their output naming is handled in C++, not via DialogScript.
+
+### Resolution Mismatch at Sequence Boundaries
+
+> Houdini 21.0.631
+
+**`layerAtFrame()` returns a default 1024×1024 layer for frames outside the source sequence range.** No error — just wrong resolution.
+
+**Anti-pattern:** Echo effect called `layerAtFrame(frame - 5)` near the start of a sequence (frame 1001). Frames before 1001 returned 1024×1024 instead of the expected 1920×1080. `np.maximum()` then failed or produced garbage due to shape mismatch.
+
+**Fix:** Guard against resolution mismatch before blending:
+
+```python
+echo_layer = source.layerAtFrame(echo_frame)
+if echo_layer.bufferResolution() != (width, height):
+    continue
+```
+
+### HDA `matchCurrentDefinition` Resets Internals
+
+> Houdini 21.0.631
+
+**Calling `node.matchCurrentDefinition()` on an unlocked HDA reverts ALL internal edits** — manually created nodes, rewired connections, and parm changes inside the HDA are lost.
+
+**Anti-pattern:** Unlocked an HDA with `allowEditingOfContents()`, created a null node inside, wired it into the chain, then called `matchCurrentDefinition()` to refresh the outer node. The null node disappeared and the internal chain reverted to the saved definition.
+
+**Fix:** Make all changes to the HDA definition (DialogScript, parm template, etc.) BEFORE calling `matchCurrentDefinition()`. Or save the definition (`hda_def.save()`) after internal edits and before refreshing.
+
+---
+
+## COP2 (Legacy Compositing)
+
+### COP2 VEX Filter Custom Shaders
+
+> Houdini 21.0.631
+
+**The `vexfilter` node cannot find custom `.vex` shaders by short name from user directories.** It only resolves short names from the system `$HH/vex/Cop2/` directory.
+
+**Anti-pattern:** Compiled a `.vfl` to `~/houdini21.0/vex/Cop2/softlight.vex` (which IS on `HOUDINI_PATH`), set `function` parm to `"softlight"`. Error: `"Could not find VEX Cop2 shader 'softlight'"`.
+
+**Fix:** Use the full absolute path without extension:
+
+```python
+node.parm("function").set("/home/user/houdini21.0/vex/Cop2/softlight")
+```
+
+**VFL compilation:** `vcc myfilter.vfl` from the target directory. The `cop2` context is declared in the file itself — no `-d` flag needed (that flag means "compile all functions", not "set context").
+
+### Copernicus to COP2 Translation
+
+> Houdini 21.0.631
+
+**Copernicus (`copnet`, child category `Cop`) and COP2 (`cop2net`, child category `Cop2`) are different systems.** Node types don't cross between them.
+
+Key type mappings:
+
+| Copernicus | COP2 | Notes |
+|---|---|---|
+| `blend` (mode=over) | `over` | Input order swapped: COP2 `over` is FG=in0, BG=in1 (Copernicus blend is A/BG=in0, B/FG=in1) |
+| `blend` (mode=max) | `max` | `mask` parm → `effectamount` parm |
+| `xform2d` | `xform` | Same parm names (tx, ty, etc.) |
+| `constant` | `color` | `f4r/f4g/f4b` → `colorr/colorg/colorb`; COP2 `color` is a generator (set resolution explicitly) |
+| `resample` | `scale` | COP2 `scale` uses explicit resolution, not a reference input |
+| `rop_image` | `rop_comp` | `filename` → `filename1`; frame range parms differ |
+| `channelswap` | `channelcopy` | No direct equivalent; consider skipping if `mono` is downstream |
+| `file`, `null`, `mono`, `invert`, `gamma`, `layer` | same name | Parm names may differ (e.g. COP2 file uses `filename1`) |
+
+### COP2 File Node Frame Range
+
+> Houdini 21.0.631
+
+**COP2 `file` node shows a grey dotted X when the current frame is outside the node's `start`/`length` range.** No error — just a blank frame with a grey X overlay.
+
+**Anti-pattern:** File node with expression-based frame offset (e.g. `` `padzero(4,$F-1001)` ``) mapping frames 1002–1265 to files frame_0001.png–frame_0264.png. Default `start=1` and `length=264` meant valid range was frames 1–264, but timeline was at frame 1016.
+
+**Fix:** Set `start` to match the first Houdini frame where a file exists (1002 in this case). The `length` stays at the file count (264).
+
+---
+
+## Merge / Blend Mode Math Reference
+
+Comprehensive reference for compositing blend modes. Useful when implementing custom VEX filters.
+
+Source: [Nuke Merge Operations](https://learn.foundry.com/nuke/9.0/content/comp_environment/merging/merge_operations.html)
+
+Where **A = foreground**, **B = background**, **a/b = respective alpha**:
+
+| Mode | Formula |
+|---|---|
+| Over | `A + B(1-a)` |
+| Under | `A(1-b) + B` |
+| Plus / Add | `A + B` |
+| Multiply | `AB` |
+| Screen | `A + B - AB` |
+| Max / Lighten | `max(A, B)` |
+| Min / Darken | `min(A, B)` |
+| Soft Light | If `AB < 1`: `B(2A + B(1 - AB))`, else: `2AB` |
+| Hard Light | If `A < 0.5`: `2AB`, else: `1 - 2(1-A)(1-B)` |
+| Overlay | Hard Light with inputs swapped |
+| Color Dodge | `B / (1-A)` |
+| Color Burn | `1 - (1-B)/A` |
+| Difference | `|A - B|` |
+| Exclusion | `A + B - 2AB` |
 
 ---
 

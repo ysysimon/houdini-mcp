@@ -98,18 +98,25 @@ This is normal. It means the MCP bridge closed its TCP connection (e.g., Claude 
 
 ### Plugin doesn't auto-start when Houdini opens
 
-The plugin auto-starts via `houdinimcp/__init__.py` which calls `initialize_plugin()` on import. If it's not loading:
+The plugin auto-starts via two mechanisms: the installer adds `import houdinimcp` to `pythonrc.py` (runs at Houdini startup), and `houdinimcp/__init__.py` calls `initialize_plugin()` on import. If it's not loading:
 
-1. Check that the Houdini packages file is valid JSON:
+1. Check that `pythonrc.py` contains the import line:
+   ```bash
+   grep houdinimcp ~/houdiniX.Y/scripts/pythonrc.py
+   ```
+   If missing, re-run `python scripts/install.py`.
+
+2. Check that the Houdini packages file is valid JSON:
    ```bash
    python -m json.tool ~/houdiniX.Y/packages/houdinimcp.json
    ```
 
-2. Check that `PYTHONPATH` in the package includes the right directory. Open the file and verify the `env` section points to `~/houdiniX.Y/scripts/python/`.
+3. Check that `PYTHONPATH` in the package includes the right directory. Open the file and verify the `env` section points to `~/houdiniX.Y/scripts/python/`.
 
-3. Look for import errors in the Houdini console on startup. Common causes:
-   - **PySide2 not available** — the server uses `QTimer` from PySide2. This should always be present in GUI Houdini, but may be missing in `hython` (command-line Houdini). The plugin is designed for GUI sessions.
-   - **Missing handler files** — if `handlers/` wasn't fully copied, you'll get `ImportError`. Re-run `uv run python scripts/install.py`.
+4. Look for import errors in the Houdini console on startup. Common causes:
+   - **Missing handler files** — if `handlers/` wasn't fully copied, you'll get `ImportError`. Re-run `python scripts/install.py`.
+
+**Still not working?** The MCP bridge can auto-launch a headless `hython` session as a fallback — see "Headless Mode" below.
 
 ### Plugin loads but server fails to start
 
@@ -302,6 +309,38 @@ viewer = toolutils.sceneViewer()
 ### `pdg_status` returns stale data
 
 PDG cook is non-blocking. After calling `pdg_cook`, poll `pdg_status` after a delay to get updated counts. The cook runs asynchronously in Houdini.
+
+---
+
+## Headless Mode
+
+### Bridge doesn't auto-launch hython
+
+When no Houdini GUI is running, the MCP bridge tries to find and launch `hython` automatically. If this isn't working:
+
+1. **Is hython findable?** The bridge checks `$HFS/bin/hython`, then `PATH`, then common install locations (`/opt/hfs*`, `C:\Program Files\Side Effects Software\*`). Verify:
+   ```bash
+   which hython
+   # or
+   ls /opt/hfs*/bin/hython
+   ```
+
+2. **Is headless disabled?** Check that `HOUDINIMCP_NO_HEADLESS` isn't set:
+   ```bash
+   echo $HOUDINIMCP_NO_HEADLESS
+   ```
+
+3. **Does hython start at all?** Try running it manually:
+   ```bash
+   hython scripts/headless_server.py
+   ```
+   Check for license errors, missing PySide2, or import failures.
+
+4. **Port conflict?** If another process is on port 9876, hython's server can't bind. Check with `lsof -i :9876`.
+
+### GUI-only tools fail in headless mode
+
+Viewport, screenshot, and flipbook tools require the Houdini GUI. In headless mode, these will return errors. All other tools (nodes, geometry, parameters, rendering via ROPs, USD, PDG, HDAs, code execution) work normally.
 
 ---
 

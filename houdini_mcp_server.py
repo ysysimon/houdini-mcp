@@ -25,6 +25,10 @@ import socket
 import subprocess
 import logging
 import tempfile
+import shutil
+import platform
+import atexit
+import time as _time
 from dataclasses import dataclass
 from typing import Dict, Any, List, Optional
 from contextlib import asynccontextmanager
@@ -32,6 +36,7 @@ from mcp.server.fastmcp import FastMCP, Context
 import asyncio
 
 HOUDINI_PORT = int(os.getenv("HOUDINIMCP_PORT", 9876))
+HEADLESS_DISABLED = os.getenv("HOUDINIMCP_NO_HEADLESS", "").strip() in ("1", "true", "yes")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("HoudiniMCP_StdioServer")
@@ -145,19 +150,161 @@ class HoudiniConnection:
             return {"status": "error", "message": error_msg, "origin": "mcp_server_send_command"}
 
 
-# A global Houdini connection object
+# ---- Headless hython management ----
+
+_hython_process = None
+
+
+def find_hython() -> Optional[str]:
+    """Locate the hython binary (Houdini's headless Python interpreter)."""
+    # 1. HFS env var (set when Houdini environment is sourced)
+    hfs = os.environ.get("HFS")
+    if hfs:
+        candidate = os.path.join(hfs, "bin", "hython")
+        if os.path.isfile(candidate):
+            return candidate
+
+    # 2. Already on PATH
+    on_path = shutil.which("hython")
+    if on_path:
+        return on_path
+
+    # 3. Scan common install locations
+    system = platform.system()
+    candidates = []
+    if system == "Linux":
+        if os.path.isdir("/opt"):
+            for d in sorted(os.listdir("/opt"), reverse=True):
+                if d.startswith("hfs"):
+                    candidates.append(os.path.join("/opt", d, "bin", "hython"))
+    elif system == "Windows":
+        for base in [r"C:\Program Files\Side Effects Software",
+                     r"C:\Program Files (x86)\Side Effects Software"]:
+            if os.path.isdir(base):
+                for d in sorted(os.listdir(base), reverse=True):
+                    candidates.append(os.path.join(base, d, "bin", "hython.exe"))
+    elif system == "Darwin":
+        for base in ["/Applications/Houdini"]:
+            if os.path.isdir(base):
+                for d in sorted(os.listdir(base), reverse=True):
+                    candidates.append(os.path.join(
+                        base, d, "Frameworks", "Houdini.framework",
+                        "Versions", "Current", "Resources", "bin", "hython"))
+        if os.path.isdir("/opt"):
+            for d in sorted(os.listdir("/opt"), reverse=True):
+                if d.startswith("hfs"):
+                    candidates.append(os.path.join("/opt", d, "bin", "hython"))
+
+    for c in candidates:
+        if os.path.isfile(c):
+            return c
+    return None
+
+
+def _port_is_listening(port: int, host: str = "localhost") -> bool:
+    """Check if a TCP port is accepting connections."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1)
+            s.connect((host, port))
+        return True
+    except (ConnectionRefusedError, OSError, socket.timeout):
+        return False
+
+
+def _launch_headless_houdini() -> bool:
+    """Launch hython with the headless MCP server. Returns True if server is ready."""
+    global _hython_process
+    if _hython_process and _hython_process.poll() is None:
+        return _port_is_listening(HOUDINI_PORT)
+
+    hython = find_hython()
+    if not hython:
+        logger.warning("Cannot launch headless Houdini: hython not found.")
+        return False
+
+    headless_script = os.path.join(script_dir, "scripts", "headless_server.py")
+    if not os.path.isfile(headless_script):
+        logger.error(f"Headless server script not found: {headless_script}")
+        return False
+
+    env = os.environ.copy()
+    env["HOUDINIMCP_PORT"] = str(HOUDINI_PORT)
+
+    logger.info(f"Launching headless Houdini: {hython} {headless_script}")
+    _hython_process = subprocess.Popen(
+        [hython, headless_script],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    # Wait for the server to start listening (up to 30 seconds — hython startup is slow)
+    for _ in range(60):
+        if _hython_process.poll() is not None:
+            # Process exited unexpectedly
+            stderr = _hython_process.stderr.read().decode(errors="replace")
+            logger.error(f"hython exited early (code {_hython_process.returncode}): {stderr[:500]}")
+            _hython_process = None
+            return False
+        if _port_is_listening(HOUDINI_PORT):
+            logger.info("Headless Houdini is ready.")
+            return True
+        _time.sleep(0.5)
+
+    logger.error("Headless Houdini failed to start within 30 seconds.")
+    _cleanup_hython()
+    return False
+
+
+def _cleanup_hython():
+    """Terminate the managed hython process if running."""
+    global _hython_process
+    if _hython_process and _hython_process.poll() is None:
+        logger.info("Shutting down headless Houdini...")
+        _hython_process.terminate()
+        try:
+            _hython_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            _hython_process.kill()
+            _hython_process.wait()
+    _hython_process = None
+
+
+atexit.register(_cleanup_hython)
+
+
+# ---- Global connection ----
+
 _houdini_connection: HoudiniConnection = None
 
+
 def get_houdini_connection() -> HoudiniConnection:
-    """Get or create a persistent HoudiniConnection object."""
+    """Get or create a persistent HoudiniConnection object.
+
+    If no Houdini instance is listening, attempts to launch a headless hython
+    session automatically (unless HOUDINIMCP_NO_HEADLESS=1 is set).
+    """
     global _houdini_connection
     if _houdini_connection is None:
         logger.info("Creating new HoudiniConnection.")
         _houdini_connection = HoudiniConnection(host="localhost", port=HOUDINI_PORT)
 
     if not _houdini_connection.connect():
-         _houdini_connection = None
-         raise ConnectionError(f"Could not connect to Houdini on localhost:{HOUDINI_PORT}. Is the plugin running?")
+        # No Houdini listening — try launching headless
+        if not HEADLESS_DISABLED:
+            logger.info("No Houdini detected. Attempting headless launch...")
+            if _launch_headless_houdini():
+                # Retry connection
+                _houdini_connection = HoudiniConnection(host="localhost", port=HOUDINI_PORT)
+                if _houdini_connection.connect():
+                    return _houdini_connection
+
+        _houdini_connection = None
+        raise ConnectionError(
+            f"Could not connect to Houdini on localhost:{HOUDINI_PORT}. "
+            "Is the plugin running? (Set HOUDINIMCP_NO_HEADLESS=1 to disable auto-launch.)"
+        )
 
     return _houdini_connection
 
@@ -213,6 +360,7 @@ async def server_lifespan(app: FastMCP):
     if _houdini_connection is not None:
         _houdini_connection.disconnect()
         _houdini_connection = None
+    _cleanup_hython()
     logger.info("Connection to Houdini closed.")
 
 mcp.lifespan = server_lifespan

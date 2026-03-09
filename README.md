@@ -20,7 +20,7 @@
 
 ---
 
-Control **SideFX Houdini** from **Claude** using the **Model Context Protocol**. HoudiniMCP connects to your running Houdini instance — your license, your scene, your tools. The bridge talks to Houdini's Python API over a local TCP socket, so everything runs on your machine against your own installation.
+Control **SideFX Houdini** from **Claude** using the **Model Context Protocol**. HoudiniMCP connects to your running Houdini instance — your license, your scene, your tools. The bridge talks to Houdini's Python API over a local TCP socket, so everything runs on your machine against your own installation. If no Houdini GUI is running, the bridge auto-launches a headless `hython` session so you can work without opening the UI.
 
 - **166 MCP tools** — nodes, rendering, geometry, PDG/TOPs, USD/Solaris, HDAs, scene management, parameters, animation, VEX, DOPs, viewport, COPs, CHOPs, takes, cache, workflows
 - **30,000+ searchable documents** — Houdini docs + patterns extracted from your Houdini install's example files
@@ -58,7 +58,7 @@ python scripts/install.py --houdini-version 20.5
 python scripts/install.py --dry-run
 ```
 
-This copies plugin files to your Houdini preferences directory and creates a packages JSON for auto-loading.
+This copies plugin files to your Houdini preferences directory, creates a packages JSON for auto-loading, and adds a startup hook (`pythonrc.py`) so the MCP server starts automatically when Houdini opens.
 
 #### 2. Install MCP Dependencies
 
@@ -159,6 +159,8 @@ HoudiniMCP exposes 166 tools, 8 resources, and 6 prompts over MCP, organized by 
 Claude (MCP stdio) → houdini_mcp_server.py (Bridge) → TCP:9876 → server.py (Houdini Plugin) → hou API
                    ↘ houdini_rag.py (BM25 search — docs + patterns, local-only)
                    ↖ scripts/ingest_hips.py (pattern extraction from .hip files)
+
+No Houdini running? Bridge auto-launches hython → headless_server.py → server.py → hou API
 ```
 
 <details>
@@ -427,6 +429,19 @@ Claude (MCP stdio) → houdini_mcp_server.py (Bridge) → TCP:9876 → server.py
 ## Shelf Tools
 
 The installer adds a **HoudiniMCP** shelf with a **Toggle MCP Server** button that starts or stops the TCP server on localhost:9876.
+
+## Headless Mode
+
+If no Houdini GUI is running when the MCP bridge starts, it automatically launches a headless `hython` session with the TCP server. This means Claude can work with Houdini's Python API (nodes, geometry, parameters, USD, PDG, rendering, etc.) without opening the UI.
+
+- **Auto-detected**: the bridge probes port 9876 on first tool call — if nothing is listening, it finds `hython` and starts it
+- **Transparent**: same tools, same API — just no viewport or interactive UI
+- **Cleanup**: the hython process is terminated when the MCP bridge shuts down
+- **Disable**: set `HOUDINIMCP_NO_HEADLESS=1` to prevent auto-launch
+
+hython is found via `$HFS/bin/hython`, `PATH`, or common install locations (`/opt/hfs*`, `C:\Program Files\Side Effects Software\*`).
+
+> **Note:** GUI-only tools (viewport, screenshots, flipbook) won't work in headless mode. All node, geometry, parameter, rendering, USD, PDG, HDA, and code execution tools work normally.
 
 <details>
 <summary><strong>Ingest Pipeline</strong></summary>

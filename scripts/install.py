@@ -195,6 +195,28 @@ def install(prefs_dir, source_dir, dry_run=False):
             f.write("\n")
         print(f"  Created MCP config: {mcp_config_path}")
 
+    # Create/update pythonrc.py so Houdini auto-imports the plugin at startup
+    scripts_dir = os.path.join(prefs_dir, "scripts")
+    pythonrc_path = os.path.join(scripts_dir, "pythonrc.py")
+    import_line = "import houdinimcp  # Auto-start HoudiniMCP server"
+
+    existing_content = ""
+    if os.path.isfile(pythonrc_path):
+        with open(pythonrc_path) as f:
+            existing_content = f.read()
+
+    if "import houdinimcp" in existing_content:
+        print(f"  pythonrc.py already imports houdinimcp")
+    elif dry_run:
+        print(f"  APPEND '{import_line}' to {pythonrc_path}")
+    else:
+        os.makedirs(scripts_dir, exist_ok=True)
+        with open(pythonrc_path, "a") as f:
+            if existing_content and not existing_content.endswith("\n"):
+                f.write("\n")
+            f.write(import_line + "\n")
+        print(f"  Added auto-start to {pythonrc_path}")
+
     print("\nDone!" if not dry_run else "\nDry run complete — no files were changed.")
     if not dry_run:
         print("Restart Houdini for changes to take effect.")

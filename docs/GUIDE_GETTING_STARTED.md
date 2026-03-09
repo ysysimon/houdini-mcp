@@ -69,11 +69,13 @@ Go to **Settings > MCP > Add new MCP server** and use the same configuration.
 
 ## Step 5: Verify the Connection
 
-1. Start Houdini (the MCP server plugin should auto-start on port 9876)
+1. Start Houdini (the MCP server plugin auto-starts on port 9876 via `pythonrc.py`)
 2. In Claude, ask: "Ping Houdini — is it connected?"
 3. Claude should respond with server status info
 
-If auto-start didn't work, run this in Houdini's Python console:
+**No Houdini running?** The MCP bridge auto-launches a headless `hython` session when it can't find a running Houdini instance. All non-GUI tools (nodes, geometry, parameters, USD, PDG, rendering, etc.) work in headless mode. Set `HOUDINIMCP_NO_HEADLESS=1` to disable.
+
+If auto-start didn't work in the GUI, run this in Houdini's Python console:
 
 ```python
 import houdinimcp

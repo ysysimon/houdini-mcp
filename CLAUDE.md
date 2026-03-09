@@ -53,8 +53,9 @@ src/houdinimcp/
     ClaudeTerminal.pypanel     # Houdini panel XML definition
     houdinimcp.shelf           # Shelf toolbar (Claude Terminal + Toggle Server buttons)
 scripts/
-    install.py                 # Install plugin + handlers + panel into Houdini prefs
+    install.py                 # Install plugin + handlers + panel + pythonrc into Houdini prefs
     launch.py                  # Launch Houdini and/or MCP bridge
+    headless_server.py         # Run MCP TCP server inside hython (no GUI)
     fetch_houdini_docs.py      # Download Houdini docs corpus and build BM25 index
     hip_parser.py              # Cpio-based .hip file parser (stdlib only)
     hip_patterns.py            # Pattern extraction from parsed .hip data
@@ -88,6 +89,8 @@ python scripts/install.py
 ```
 Claude (MCP stdio) → houdini_mcp_server.py (Bridge) → TCP:9876 → server.py (Plugin) → hou API
                    ↘ houdini_rag.py (docs search, local-only)
+
+No Houdini? Bridge auto-launches: hython → headless_server.py → server.py → hou API
 ```
 
 ### Layer 1: Houdini Plugin (`src/houdinimcp/`)
@@ -103,6 +106,7 @@ Claude (MCP stdio) → houdini_mcp_server.py (Bridge) → TCP:9876 → server.py
 - `HoudiniConnection` dataclass manages a persistent TCP connection (global singleton).
 - `_send_tool_command()` helper reduces each MCP tool to ~3 lines.
 - `search_docs` and `get_doc` tools run locally via `houdini_rag.py` — no Houdini connection needed.
+- **Headless auto-launch**: if no Houdini is listening, `find_hython()` locates the binary and `_launch_headless_houdini()` spawns `scripts/headless_server.py` in a managed subprocess. Cleaned up on shutdown via lifespan + atexit. Disable with `HOUDINIMCP_NO_HEADLESS=1`.
 
 ### Layer 3: Rendering (`src/houdinimcp/HoudiniMCPRender.py`)
 - Utility module imported by `handlers/rendering.py` (runs inside Houdini).
