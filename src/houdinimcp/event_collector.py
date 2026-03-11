@@ -36,7 +36,10 @@ class EventCollector:
                 (hou.nodeEventType.ChildCreated, hou.nodeEventType.ChildDeleted),
                 self._on_node_event,
             )
-        hou.playbar.addEventCallback(self._on_playbar_event)
+        try:
+            hou.playbar.addEventCallback(self._on_playbar_event)
+        except hou.NotAvailable:
+            pass  # headless hython — no playbar
         self._callbacks_registered = True
 
     def stop(self):

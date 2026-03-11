@@ -1,3 +1,4 @@
+import os
 import hou
 from .server import HoudiniMCPServer
 
@@ -23,5 +24,6 @@ def initialize_plugin():
     # Auto-start server if you want:
     start_server()
 
-# If you want the plugin to auto-load on import:
-initialize_plugin()
+# Auto-load on import (skipped for headless — managed by headless_server.py)
+if not os.environ.get("HOUDINIMCP_HEADLESS"):
+    initialize_plugin()

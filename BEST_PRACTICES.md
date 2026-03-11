@@ -23,6 +23,7 @@ Hard-won lessons from real production use of the Houdini MCP. Organized by conte
 - [General MCP Usage](#general-mcp-usage)
   - [Connection Discipline](#connection-discipline)
   - [Node Inspection Caveats](#node-inspection-caveats)
+  - [HDA Script Sync](#hda-script-sync)
   - [Diagnostics Workflow](#diagnostics-workflow)
 
 ---
@@ -286,6 +287,16 @@ Where **A = foreground**, **B = background**, **a/b = respective alpha**:
 **`get_node_info` can crash on certain node types.** We encountered a `'Color' object is not iterable` error when calling it on nodes with non-standard color configurations.
 
 **Workaround:** Use `execute_houdini_code` to inspect nodes manually when `get_node_info` fails. Iterate `node.parms()`, `node.inputs()`, `node.outputs()` directly.
+
+### HDA Script Sync
+
+> Houdini 21.0.631
+
+**Editing HDA script files on disk does NOT update the embedded code inside the `.hdalc`.** The HDA definition carries its own copy of `PythonModule.py`, `OnCreated.py`, etc. If you only change the on-disk files, the live HDA keeps running the old code.
+
+**Anti-pattern:** Changed `PythonModule.py` in the repo, committed, but didn't update the HDA definition. The node in Houdini still ran the old logic.
+
+**Fix:** After modifying any HDA script file, push the updated code into the HDA definition — via Type Properties → Scripts in the Houdini UI, or via MCP (`set_hda_section_content` / `update_hda`). Treat HDA sync as part of the commit.
 
 ### Diagnostics Workflow
 

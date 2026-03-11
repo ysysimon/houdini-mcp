@@ -152,8 +152,8 @@ class HoudiniMCPServer:
             self.timer = QtCore.QTimer()
             self.timer.timeout.connect(self._process_server)
             self.timer.start(100)
-            self.event_collector.start()
             print(f"HoudiniMCP server started on {self.host}:{self.port}")
+            self.event_collector.start()
         except Exception as e:
             print(f"Failed to start server: {str(e)}")
             self.stop()

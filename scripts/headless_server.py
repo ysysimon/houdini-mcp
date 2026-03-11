@@ -21,16 +21,18 @@ if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
 try:
-    from PySide6 import QtWidgets
+    from PySide6 import QtCore
 except ImportError:
-    from PySide2 import QtWidgets
+    from PySide2 import QtCore
 
 # QCoreApplication is required for QTimer-based server polling
-app = QtWidgets.QCoreApplication.instance() or QtWidgets.QCoreApplication(sys.argv)
+app = QtCore.QCoreApplication.instance() or QtCore.QCoreApplication(sys.argv)
 
 # Handle SIGTERM gracefully so cleanup runs on bridge shutdown
 signal.signal(signal.SIGTERM, lambda *_: app.quit())
 
+# Skip __init__.py auto-start — we manage the server lifecycle here
+os.environ["HOUDINIMCP_HEADLESS"] = "1"
 from houdinimcp.server import HoudiniMCPServer
 
 port = int(os.environ.get("HOUDINIMCP_PORT", 9876))
@@ -38,4 +40,4 @@ server = HoudiniMCPServer(port=port)
 server.start()
 
 print(f"Headless HoudiniMCP server ready on port {port}", flush=True)
-sys.exit(app.exec_())
+sys.exit(app.exec())
