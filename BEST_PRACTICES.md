@@ -20,6 +20,8 @@ Hard-won lessons from real production use of the Houdini MCP. Organized by conte
   - [Copernicus to COP2 Translation](#copernicus-to-cop2-translation)
   - [COP2 File Node Frame Range](#cop2-file-node-frame-range)
 - [Merge / Blend Mode Math Reference](#merge--blend-mode-math-reference)
+- [LOPs / USD](#lops--usd)
+  - [RenderProduct orderedVars Missing in Flattened Scenes](#renderproduct-orderedvars-missing-in-flattened-scenes)
 - [General MCP Usage](#general-mcp-usage)
   - [Connection Discipline](#connection-discipline)
   - [Node Inspection Caveats](#node-inspection-caveats)
@@ -264,6 +266,20 @@ Where **A = foreground**, **B = background**, **a/b = respective alpha**:
 | Color Burn | `1 - (1-B)/A` |
 | Difference | `|A - B|` |
 | Exclusion | `A + B - 2AB` |
+
+---
+
+## LOPs / USD
+
+### RenderProduct orderedVars Missing in Flattened Scenes
+
+> Houdini 21.0.631
+
+**Symptom:** Standalone husk logs `No orderedVars to specify channels for /Render/Products/renderproduct` and renders fail or produce empty EXRs.
+
+**Cause:** Houdini's Karma LOP nodes author RenderProduct prims without explicit `orderedVars` relationships. Karma in-process handles AOV/channel selection internally. When the stage is flattened and exported to USDA/USDZ for remote rendering, husk has no way to know which channels to write.
+
+**Fix:** Before flattening, ensure every RenderProduct has `orderedVars` pointing to at least a beauty (Ci, color3f) and alpha (a, float) RenderVar. Check `UsdRender.Product(prim).GetOrderedVarsRel().GetTargets()` — if empty, author the defaults.
 
 ---
 
