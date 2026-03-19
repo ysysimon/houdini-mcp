@@ -33,7 +33,7 @@ Or supply the three inputs explicitly:
 ### 2. Rename
 
 - Scan new node names (and their subchildren names) for the source shot code,
-  case-insensitive (e.g. `PARK003`, `PARK0003`).
+  case-insensitive and zero padding insentive (e.g. `PARK003`, `park00003`).
 - Also catch Houdini's auto-increment artefacts: if the source node was named
   `objnet_PARK003`, the copy will be `objnet_PARK004` — the shot suffix digit
   incremented, not the shot code itself. Detect these by checking for the source
@@ -46,7 +46,13 @@ Or supply the three inputs explicitly:
 ### 3. Scan
 
 - Deep-scan every new node and all its subchildren (`node.allSubChildren()`).
-- For each node, iterate `node.parms()` and read `parm.unexpandedString()`.
+- For each node, iterate `node.parms()`. **Before calling `parm.unexpandedString()`, check
+  that the parm is a string type** (`parm.parmTemplate().type() == hou.parmTemplateType.String`).
+  Skip non-string parms entirely. LOP nodes such as `editmaterialproperties` have 160+ spare
+  parameters of mixed types; calling `unexpandedString()` on a non-string spare raises
+  `OperationFailed` and aborts the loop for that node, silently dropping all subsequent parms
+  (including file texture paths like `emission_color_file`).
+- Also wrap each `unexpandedString()` call in a `try/except` as a belt-and-suspenders guard.
 - Collect every hit where the value contains the source shot directory path.
 - Report: node path | parameter name | current value.
 
@@ -57,7 +63,7 @@ Or supply the three inputs explicitly:
 - Match sequences semantically, in this priority order:
   1. **Shot plate** — keywords: `pl01_ref`, `ref`, `HD_ref`, `plate`
   2. **Clean plate** — keywords: `cp01`, `cleanPlate`, `clean_plate`
-  3. **Roto** — keywords: `roto`
+  3. **Roto** — keywords: `roto`, `matte`
   4. **Render passes** — match by pass name: `Normal`, `Depth`, `Alpha`,
      `BaseColor`, `Roughness`, `Metallic`, `Specular`, `Source`
 - Use process of elimination: once a source sequence is matched, remove it from
@@ -105,7 +111,7 @@ frame number matches `$F` directly or requires an offset.
 
 ## Notes
 
-- **Do not remap** the 3 unmatched-sequence parameters — leave them pointing at
+- **Do not remap** any unmatched-sequence parameters — leave them pointing at
   the source shot. The effect in those nodes will be wrong, but that is expected
   and preferable to a silent bad remap. The user handles them manually.
 - If the source shot directory has render-pass subdirectories at the root level

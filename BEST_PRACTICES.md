@@ -24,6 +24,7 @@ Hard-won lessons from real production use of the Houdini MCP. Organized by conte
   - [Standalone husk: Let Karma Author RenderVars, Don't DIY](#standalone-husk-let-karma-author-rendervars-dont-diy)
   - [Standalone husk: productName Time-Sampled vs Default](#standalone-husk-productname-time-sampled-vs-default)
   - [Standalone husk: VEX Shaders Need opdef: URIs](#standalone-husk-vex-shaders-need-opdef-uris)
+  - [editmaterialproperties: parm.unexpandedString() Aborts Mid-Node on Non-String Spare Parms](#editmaterialproperties-parmunexpandedstring-aborts-mid-node-on-non-string-spare-parms)
 - [SOPs / File Cache](#sops--file-cache)
   - [parm.set() Silently Ignored When Expression Active](#parmset-silently-ignored-when-expression-active)
   - [hbatch render Only Works with ROPs, Not SOPs](#hbatch-render-only-works-with-rops-not-sops)
@@ -339,6 +340,32 @@ attr_spec.default = new_path
 **Requirements:** Karma CPU only (not XPU). Houdini must be installed on the render machine — the OTL libraries (`$HH/otls/OPlibVop.hda`) must be loadable for factory shaders. Custom VOP HDAs need their `.hda` files deployed via `HOUDINI_OTLSCAN_PATH`.
 
 **Fully portable alternative:** Replace VEX shaders with MaterialX (`mtlxstandard_surface`, `ND_*` nodes) or `UsdPreviewSurface`. These work with Karma CPU, XPU, and standalone husk without any Houdini dependencies.
+
+### editmaterialproperties: parm.unexpandedString() Aborts Mid-Node on Non-String Spare Parms
+
+> Houdini 21.0.631
+
+**`editmaterialproperties` LOP nodes have 160+ spare parameters, most of which are non-string types (folders, floats, toggles, vectors). Calling `parm.unexpandedString()` on any of them raises `OperationFailed: Only string parms have unexpanded string`. Without a per-parm try/except, the scan loop aborts on the first non-string spare parm and never reaches later string parms (like file texture paths).**
+
+**Anti-pattern:** Iterating `node.parms()` and calling `parm.unexpandedString()` to scan for file path references. The first spare folder parm raises, killing the loop. File parms like `emission_color_file` appear later in the list and are silently skipped.
+
+**Symptom:** File path parms on `editmaterialproperties` nodes are missed during a scan, even though they contain the search string and `node.parms()` does include them.
+
+**Fix:** Check the parm template type before calling `unexpandedString()`, or guard per-parm:
+
+```python
+for p in node.parms():
+    if p.parmTemplate().type() != hou.parmTemplateType.String:
+        continue
+    try:
+        val = p.unexpandedString()
+    except Exception:
+        continue
+    if search_string in val:
+        hits.append((node.path(), p.name(), val))
+```
+
+**Note:** `node.parms()` DOES include spare parameters — that's not the issue. The issue is solely that non-string spare parms raise on `unexpandedString()`.
 
 ---
 
