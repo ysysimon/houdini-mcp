@@ -21,6 +21,7 @@ import glob
 import json
 import os
 import platform
+import re
 import subprocess
 import sys
 import time
@@ -54,10 +55,21 @@ def find_houdini_install(hfs_dir=None):
     elif system == "Darwin":
         candidates = sorted(glob.glob("/Applications/Houdini/Houdini*"), reverse=True)
     elif system == "Windows":
-        candidates = sorted(
-            glob.glob(r"C:\Program Files\Side Effects Software\Houdini *"),
-            reverse=True,
-        )
+        all_candidates = [
+            path for path in glob.glob(r"C:\Program Files\Side Effects Software\Houdini *")
+            if os.path.isdir(path)
+        ]
+        versioned_candidates = []
+        for path in all_candidates:
+            name = os.path.basename(path)
+            match = re.match(r"^Houdini (\d+)\.(\d+)(?:\.(\d+))?$", name)
+            if match:
+                major = int(match.group(1))
+                minor = int(match.group(2))
+                build = int(match.group(3) or 0)
+                versioned_candidates.append(((major, minor, build), path))
+        versioned_candidates.sort(reverse=True)
+        candidates = [path for _version, path in versioned_candidates] or sorted(all_candidates, reverse=True)
     else:
         candidates = []
 
@@ -203,7 +215,7 @@ def _cmd_parse_cpio(args):
 
     # Write results to JSON
     output_path = args.output or os.path.join(REPO_ROOT, "hip_parsed.json")
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
 
     print(f"\n{'='*60}")
@@ -288,17 +300,20 @@ def cmd_extract(args):
     parsed_scenes = []
     if os.path.exists(hip_path):
         print(f"Loading .hip data from {hip_path}")
-        with open(hip_path) as f:
+        with open(hip_path, encoding="utf-8") as f:
             parsed_scenes.extend(json.load(f))
     else:
         print("No hip_parsed.json found, running parse first...")
         cmd_parse(args)
-        with open(hip_path) as f:
+        if not os.path.exists(hip_path):
+            print(f"No parsed .hip data available at {hip_path} - skipping pattern extraction.")
+            return
+        with open(hip_path, encoding="utf-8") as f:
             parsed_scenes.extend(json.load(f))
 
     if os.path.exists(hda_path):
         print(f"Loading .hda data from {hda_path}")
-        with open(hda_path) as f:
+        with open(hda_path, encoding="utf-8") as f:
             hda_scenes = json.load(f)
         parsed_scenes.extend(hda_scenes)
         print(f"  {len(hda_scenes)} HDA definitions loaded")

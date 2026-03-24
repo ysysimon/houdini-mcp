@@ -8,7 +8,7 @@ import pytest
 # scripts/ is not a package — add it to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
-from ingest_hips import find_houdini_install, discover_hip_files
+from ingest_hips import find_houdini_install, discover_hip_files, cmd_extract
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +75,22 @@ class TestFindHoudiniInstall:
         result = find_houdini_install()
         assert result == d
 
+    def test_platform_glob_windows_ignores_houdini_server(self, tmp_path, monkeypatch):
+        """Windows auto-detect prefers versioned Houdini installs over Houdini Server."""
+        monkeypatch.delenv("HFS", raising=False)
+        monkeypatch.setattr("ingest_hips.platform.system", lambda: "Windows")
+
+        server = str(tmp_path / "Houdini Server")
+        d205 = str(tmp_path / "Houdini 20.5.594")
+        d210 = str(tmp_path / "Houdini 21.0.556")
+        os.makedirs(server)
+        os.makedirs(d205)
+        os.makedirs(d210)
+
+        monkeypatch.setattr("ingest_hips.glob.glob", lambda p, **kw: [server, d205, d210])
+        result = find_houdini_install()
+        assert result == d210
+
     def test_nothing_found(self, monkeypatch):
         """No env, no glob matches → None."""
         monkeypatch.delenv("HFS", raising=False)
@@ -92,7 +108,7 @@ class TestDiscoverHipFiles:
         for rel in files:
             full = os.path.join(base, rel)
             os.makedirs(os.path.dirname(full), exist_ok=True)
-            with open(full, "w") as f:
+            with open(full, "w", encoding="utf-8") as f:
                 f.write("dummy")
 
     def test_finds_hip_and_hda(self, tmp_path):
@@ -171,3 +187,17 @@ class TestDiscoverHipFiles:
         ])
         results = discover_hip_files(hfs)
         assert len(results) == 5
+
+
+class TestCmdExtract:
+    def test_missing_parsed_file_skips_gracefully(self, tmp_path, monkeypatch, capsys):
+        """cmd_extract should stop cleanly when parse produces no hip_parsed.json."""
+        monkeypatch.setattr("ingest_hips.REPO_ROOT", str(tmp_path))
+        monkeypatch.setattr("ingest_hips.cmd_parse", lambda args: None)
+
+        args = type("Args", (), {"output": None, "extra_dir": [], "hfs_dir": None, "workers": 0})()
+        cmd_extract(args)
+
+        captured = capsys.readouterr()
+        assert "No hip_parsed.json found, running parse first..." in captured.out
+        assert "skipping pattern extraction" in captured.out
