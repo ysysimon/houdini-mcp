@@ -35,6 +35,38 @@ HDA_EXTENSIONS = {".hda", ".otl"}
 ALL_EXTENSIONS = HIP_EXTENSIONS | HDA_EXTENSIONS
 
 
+def _select_highest_version_houdini_path(candidates, system):
+    """Return the highest-version Houdini install path from candidate directories.
+
+    This explicitly returns the highest-version Houdini path when candidate
+    directory names contain parseable version numbers. If no versioned names
+    match for the current platform, falls back to reverse string sorting.
+    """
+    version_patterns = {
+        "Linux": r"^hfs(\d+)\.(\d+)(?:\.(\d+))?$",
+        "Darwin": r"^Houdini(\d+)\.(\d+)(?:\.(\d+))?$",
+        "Windows": r"^Houdini (\d+)\.(\d+)(?:\.(\d+))?$",
+    }
+    pattern = version_patterns.get(system)
+    all_candidates = [path for path in candidates if os.path.isdir(path)]
+    if not pattern:
+        return sorted(all_candidates, reverse=True)
+
+    versioned_candidates = []
+    for path in all_candidates:
+        name = os.path.basename(path)
+        match = re.match(pattern, name)
+        if not match:
+            continue
+        major = int(match.group(1))
+        minor = int(match.group(2))
+        build = int(match.group(3) or 0)
+        versioned_candidates.append(((major, minor, build), path))
+
+    versioned_candidates.sort(reverse=True)
+    return [path for _version, path in versioned_candidates] or sorted(all_candidates, reverse=True)
+
+
 def find_houdini_install(hfs_dir=None):
     """Return the $HFS path (Houdini install root) or None.
 
@@ -51,25 +83,17 @@ def find_houdini_install(hfs_dir=None):
 
     system = platform.system()
     if system == "Linux":
-        candidates = sorted(glob.glob("/opt/hfs*"), reverse=True)
+        candidates = _select_highest_version_houdini_path(glob.glob("/opt/hfs*"), system)
     elif system == "Darwin":
-        candidates = sorted(glob.glob("/Applications/Houdini/Houdini*"), reverse=True)
+        candidates = _select_highest_version_houdini_path(
+            glob.glob("/Applications/Houdini/Houdini*"),
+            system,
+        )
     elif system == "Windows":
-        all_candidates = [
-            path for path in glob.glob(r"C:\Program Files\Side Effects Software\Houdini *")
-            if os.path.isdir(path)
-        ]
-        versioned_candidates = []
-        for path in all_candidates:
-            name = os.path.basename(path)
-            match = re.match(r"^Houdini (\d+)\.(\d+)(?:\.(\d+))?$", name)
-            if match:
-                major = int(match.group(1))
-                minor = int(match.group(2))
-                build = int(match.group(3) or 0)
-                versioned_candidates.append(((major, minor, build), path))
-        versioned_candidates.sort(reverse=True)
-        candidates = [path for _version, path in versioned_candidates] or sorted(all_candidates, reverse=True)
+        candidates = _select_highest_version_houdini_path(
+            glob.glob(r"C:\Program Files\Side Effects Software\Houdini *"),
+            system,
+        )
     else:
         candidates = []
 

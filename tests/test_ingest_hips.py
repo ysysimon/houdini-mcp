@@ -91,6 +91,34 @@ class TestFindHoudiniInstall:
         result = find_houdini_install()
         assert result == d210
 
+    def test_platform_glob_linux_prefers_highest_version(self, tmp_path, monkeypatch):
+        """Linux auto-detect compares hfs versions numerically."""
+        monkeypatch.delenv("HFS", raising=False)
+        monkeypatch.setattr("ingest_hips.platform.system", lambda: "Linux")
+
+        d1 = str(tmp_path / "hfs20.5.999")
+        d2 = str(tmp_path / "hfs21.0.123")
+        os.makedirs(d1)
+        os.makedirs(d2)
+
+        monkeypatch.setattr("ingest_hips.glob.glob", lambda p, **kw: [d1, d2])
+        result = find_houdini_install()
+        assert result == d2
+
+    def test_platform_glob_darwin_prefers_highest_version(self, tmp_path, monkeypatch):
+        """macOS auto-detect compares Houdini app versions numerically."""
+        monkeypatch.delenv("HFS", raising=False)
+        monkeypatch.setattr("ingest_hips.platform.system", lambda: "Darwin")
+
+        d1 = str(tmp_path / "Houdini20.5.999")
+        d2 = str(tmp_path / "Houdini21.0.123")
+        os.makedirs(d1)
+        os.makedirs(d2)
+
+        monkeypatch.setattr("ingest_hips.glob.glob", lambda p, **kw: [d1, d2])
+        result = find_houdini_install()
+        assert result == d2
+
     def test_nothing_found(self, monkeypatch):
         """No env, no glob matches → None."""
         monkeypatch.delenv("HFS", raising=False)
